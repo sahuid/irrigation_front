@@ -32,14 +32,15 @@
         v-loading="loading"
         :empty-text="emptyText"
       >
-        <el-table-column prop="id" label="分组ID" width="80" />
-        <el-table-column prop="groupName" label="分组名称" width="150" />
-        <el-table-column label="关联地块数" width="120">
+        <el-table-column prop="id" label="分组ID" width="120" />
+        <el-table-column prop="groupName" label="分组名称" width="250" />
+        <el-table-column label="关联地块数" width="150">
           <template #default="scope">
             {{ scope.row.fieldList ? scope.row.fieldList.length : 0 }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="250">
+        <el-table-column prop="locationInfo" label="位置信息" min-width="200" />
+        <el-table-column label="操作" fixed="right" width="400">
           <template #default="scope">
             <el-button 
               size="small" 
@@ -55,6 +56,14 @@
               @click="handleViewFields(scope.row)"
             >
               查看地块
+            </el-button>
+            <el-button 
+              size="small" 
+              type="info" 
+              @click="handleAddIrrigationUnit(scope.row)"
+              :disabled="!hasAddIrrigationUnitPermission"
+            >
+              添加灌溉单元
             </el-button>
             <el-button 
               size="small" 
@@ -127,9 +136,11 @@
         v-loading="fieldLoading"
         height="400px"
       >
-        <el-table-column prop="id" label="地块ID" width="80" />
-        <el-table-column prop="fieldId" label="地块编号" width="120" />
-        <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="150" />
+        <el-table-column prop="id" label="地块ID" width="100" />
+        <el-table-column prop="fieldId" label="地块编号" width="150" />
+        <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="180" />
+        <el-table-column prop="fieldName" label="地块名称" width="180" />
+        <el-table-column prop="fieldSize" label="灌溉面积" width="120" />
         <el-table-column prop="fieldRange" label="地块范围" />
       </el-table>
       <template #footer>
@@ -138,11 +149,55 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 添加灌溉单元对话框 -->
+    <el-dialog
+      v-model="irrigationUnitDialogVisible"
+      title="添加灌溉单元到分组"
+      width="800px"
+    >
+      <div class="dialog-action-bar">
+        <el-button 
+          type="primary" 
+          @click="addSelectedUnitsToGroup" 
+          :disabled="selectedUnits.length === 0"
+          :loading="batchAddingLoading"
+        >
+          批量添加选中的灌溉单元
+        </el-button>
+      </div>
+      
+      <el-table
+        :data="irrigationUnitList"
+        border
+        style="width: 100%"
+        v-loading="irrigationUnitLoading"
+        height="400px"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" />
+        <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="180" />
+        <el-table-column prop="fieldName" label="名称" width="180" />
+        <el-table-column prop="fieldSize" label="灌溉面积" width="120" />
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="scope">
+            <el-button 
+              size="small" 
+              type="primary" 
+              @click="handleAddUnitToGroup(scope.row)"
+              :loading="scope.row.adding"
+            >
+              添加
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
@@ -192,6 +247,11 @@ const hasDeletePermission = computed(() => {
   return true
 })
 
+const hasAddIrrigationUnitPermission = computed(() => {
+  // 这里可以根据用户角色判断是否有添加灌溉单元的权限
+  return true
+})
+
 // 加载分组列表
 const loadGroupList = async () => {
   loading.value = true
@@ -200,16 +260,19 @@ const loadGroupList = async () => {
   try {
     const params = {
       page: currentPage.value,
-      pageSize: pageSize.value,
-      query: searchQuery.value
+      pageSize: pageSize.value
+    }
+    
+    // 如果有搜索关键字，添加到请求参数中
+    if (searchQuery.value) {
+      params.query = searchQuery.value
     }
     
     const response = await axios.get('/api/group/query/page', { params })
     
     if (response.data.code === 200) {
-      const data = response.data.value || {}
-      groupList.value = data.records || []
-      total.value = data.total || 0
+      groupList.value = response.data.value.records || []
+      total.value = response.data.value.total || 0
       
       // 如果没有数据
       if (groupList.value.length === 0) {
@@ -217,28 +280,19 @@ const loadGroupList = async () => {
       }
     } else {
       ElMessage.error(response.data.msg || '获取分组列表失败')
-      emptyText.value = '加载失败'
+      groupList.value = []
+      total.value = 0
+      emptyText.value = '获取数据失败'
     }
   } catch (error) {
-    console.error('加载分组列表出错:', error)
-    ElMessage.error('加载分组列表失败，请稍后重试')
-    emptyText.value = '加载失败'
+    console.error('获取分组列表出错:', error)
+    ElMessage.error('获取分组列表失败，请稍后重试')
+    groupList.value = []
+    total.value = 0
+    emptyText.value = '获取数据失败'
   } finally {
     loading.value = false
   }
-}
-
-// 处理页码变化
-const handleCurrentChange = (page) => {
-  currentPage.value = page
-  loadGroupList()
-}
-
-// 处理每页条数变化
-const handleSizeChange = (size) => {
-  pageSize.value = size
-  currentPage.value = 1
-  loadGroupList()
 }
 
 // 处理搜索
@@ -247,10 +301,22 @@ const handleSearch = () => {
   loadGroupList()
 }
 
+// 处理分页大小变化
+const handleSizeChange = (val) => {
+  pageSize.value = val
+  currentPage.value = 1 // 重置到第一页
+  loadGroupList()
+}
+
+// 处理当前页变化
+const handleCurrentChange = (val) => {
+  currentPage.value = val
+  loadGroupList()
+}
+
 // 处理添加分组
 const handleAddGroup = () => {
   isEdit.value = false
-  // 重置表单，只保留分组名称字段为空
   groupForm.id = ''
   groupForm.groupName = ''
   dialogVisible.value = true
@@ -262,32 +328,6 @@ const handleEditGroup = (row) => {
   groupForm.id = row.id
   groupForm.groupName = row.groupName
   dialogVisible.value = true
-}
-
-// 处理查看地块
-const handleViewFields = (row) => {
-  // 先清空数据，再设置加载状态
-  groupFields.value = []
-  fieldLoading.value = true
-  fieldDialogVisible.value = true
-  
-  // 使用nextTick确保DOM更新后再处理数据
-  nextTick(() => {
-    // 直接使用行数据中的fieldList
-    if (row.fieldList && row.fieldList.length > 0) {
-      groupFields.value = [...row.fieldList]
-    } else {
-      ElMessage.info('该分组暂无关联地块')
-    }
-    fieldLoading.value = false
-  })
-}
-
-// 关闭地块对话框
-const closeFieldDialog = () => {
-  fieldDialogVisible.value = false
-  // 清空数据，避免内存泄漏
-  groupFields.value = []
 }
 
 // 处理删除分组
@@ -302,10 +342,7 @@ const handleDeleteGroup = (row) => {
     }
   ).then(async () => {
     try {
-      // 使用正确的API路径和参数
-      const response = await axios.delete('/api/group/delete', {
-        params: { groupId: row.id }
-      })
+      const response = await axios.delete(`/api/group/delete/${row.id}`)
       
       if (response.data.code === 200) {
         ElMessage.success('删除成功')
@@ -320,6 +357,33 @@ const handleDeleteGroup = (row) => {
   }).catch(() => {
     // 取消删除
   })
+}
+
+// 查看地块
+const handleViewFields = async (row) => {
+  fieldDialogVisible.value = true
+  fieldLoading.value = true
+  
+  try {
+    // 直接使用分组中的fieldList数据，不需要额外请求
+    if (row.fieldList && row.fieldList.length > 0) {
+      groupFields.value = row.fieldList
+    } else {
+      groupFields.value = []
+    }
+  } catch (error) {
+    console.error('处理地块列表出错:', error)
+    ElMessage.error('获取地块列表失败，请稍后重试')
+    groupFields.value = []
+  } finally {
+    fieldLoading.value = false
+  }
+}
+
+// 关闭地块对话框
+const closeFieldDialog = () => {
+  fieldDialogVisible.value = false
+  groupFields.value = []
 }
 
 // 提交分组表单
@@ -337,11 +401,8 @@ const submitGroupForm = async () => {
           // 编辑分组
           response = await axios.put('/api/group/update', groupForm)
         } else {
-          // 添加分组 - 只发送必要的参数
-          const addData = {
-            groupName: groupForm.groupName
-          }
-          response = await axios.post('/api/group/add', addData)
+          // 添加分组
+          response = await axios.post('/api/group/add', groupForm)
         }
         
         if (response.data.code === 200) {
@@ -361,6 +422,126 @@ const submitGroupForm = async () => {
   })
 }
 
+// 添加灌溉单元对话框相关
+const irrigationUnitDialogVisible = ref(false)
+const irrigationUnitList = ref([])
+const irrigationUnitLoading = ref(false)
+const currentGroupForUnit = ref(null)
+const selectedUnits = ref([])
+const batchAddingLoading = ref(false)
+
+// 处理表格选择变化
+const handleSelectionChange = (selection) => {
+  selectedUnits.value = selection
+}
+
+// 获取灌溉单元列表
+const getIrrigationUnitList = async () => {
+  irrigationUnitLoading.value = true
+  
+  try {
+    const response = await axios.get('/api/field/list')
+    
+    if (response.data.code === 200) {
+      // 为每个灌溉单元添加loading状态
+      const units = (response.data.value || [])
+        .filter(unit => unit.fieldUnitId) // 只保留有灌溉单元编号的记录
+        .map(unit => ({
+          ...unit,
+          adding: false
+        }))
+      irrigationUnitList.value = units
+    } else {
+      ElMessage.error(response.data.msg || '获取灌溉单元列表失败')
+      irrigationUnitList.value = []
+    }
+  } catch (error) {
+    console.error('获取灌溉单元列表出错:', error)
+    ElMessage.error('获取灌溉单元列表失败，请稍后重试')
+    irrigationUnitList.value = []
+  } finally {
+    irrigationUnitLoading.value = false
+  }
+}
+
+// 添加灌溉单元到分组
+const handleAddUnitToGroup = async (unit) => {
+  // 设置当前行的loading状态
+  const index = irrigationUnitList.value.findIndex(item => item.id === unit.id)
+  if (index !== -1) {
+    irrigationUnitList.value[index].adding = true
+  }
+  
+  try {
+    const postData = {
+      fieldId: [unit.id], // 修改为数组格式
+      groupId: currentGroupForUnit.value.id
+    }
+    
+    const response = await axios.post('/api/field/to/group', postData)
+    
+    if (response.data.code === 200) {
+      ElMessage.success('添加灌溉单元成功')
+      // 从列表中移除已添加的灌溉单元
+      irrigationUnitList.value = irrigationUnitList.value.filter(item => item.id !== unit.id)
+      // 清空选中的单元
+      selectedUnits.value = selectedUnits.value.filter(item => item.id !== unit.id)
+    } else {
+      ElMessage.error(response.data.msg || '添加灌溉单元失败')
+    }
+  } catch (error) {
+    console.error('添加灌溉单元出错:', error)
+    ElMessage.error('添加灌溉单元失败，请稍后重试')
+  } finally {
+    // 重置loading状态
+    if (index !== -1 && irrigationUnitList.value[index]) {
+      irrigationUnitList.value[index].adding = false
+    }
+  }
+}
+
+// 批量添加选中的灌溉单元到分组
+const addSelectedUnitsToGroup = async () => {
+  if (selectedUnits.value.length === 0) return
+  
+  batchAddingLoading.value = true
+  
+  try {
+    const postData = {
+      fieldId: selectedUnits.value.map(unit => unit.id),
+      groupId: currentGroupForUnit.value.id
+    }
+    
+    const response = await axios.post('/api/field/to/group', postData)
+    
+    if (response.data.code === 200) {
+      ElMessage.success(`成功添加 ${selectedUnits.value.length} 个灌溉单元`)
+      
+      // 从列表中移除已添加的灌溉单元
+      const selectedIds = selectedUnits.value.map(unit => unit.id)
+      irrigationUnitList.value = irrigationUnitList.value.filter(item => !selectedIds.includes(item.id))
+      
+      // 清空选中的单元
+      selectedUnits.value = []
+    } else {
+      ElMessage.error(response.data.msg || '批量添加灌溉单元失败')
+    }
+  } catch (error) {
+    console.error('批量添加灌溉单元出错:', error)
+    ElMessage.error('批量添加灌溉单元失败，请稍后重试')
+  } finally {
+    batchAddingLoading.value = false
+  }
+}
+
+// 处理添加灌溉单元
+const handleAddIrrigationUnit = (row) => {
+  currentGroupForUnit.value = row
+  irrigationUnitDialogVisible.value = true
+  selectedUnits.value = []
+  getIrrigationUnitList()
+}
+
 // 页面加载时获取分组列表
 onMounted(() => {
   loadGroupList()
@@ -377,6 +558,13 @@ onUnmounted(() => {
   width: 100%;
 }
 
+.content-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  padding: 20px;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -390,6 +578,20 @@ onUnmounted(() => {
 
 .pagination-container {
   margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.empty-members {
+  padding: 30px 0;
+}
+
+.dialog-search-box {
+  margin-bottom: 20px;
+}
+
+.dialog-action-bar {
+  margin-bottom: 15px;
   display: flex;
   justify-content: flex-end;
 }
