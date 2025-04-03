@@ -32,23 +32,14 @@
         v-loading="loading"
         :empty-text="emptyText"
       >
-        <el-table-column prop="deviceId" label="设备编号" width="120" />
-        <el-table-column prop="deviceType" label="设备类型" width="120">
+        <el-table-column prop="deviceId" label="设备编号" width="150" />
+        <el-table-column prop="deviceType" label="设备类型" width="150">
           <template #default="scope">
-            <el-tag :type="getDeviceTypeTag(scope.row.deviceType)">
-              {{ getDeviceTypeName(scope.row.deviceType) }}
-            </el-tag>
+            {{ getDeviceTypeName(scope.row.deviceType) }}
           </template>
         </el-table-column>
-        <el-table-column prop="deviceManagerNumber" label="分组/灌溉单元编号" width="180" />
-        <el-table-column prop="deviceStatus" label="设备状态" width="120">
-          <template #default="scope">
-            <el-tag :type="scope.row.deviceStatus === 1 ? 'success' : 'danger'">
-              {{ scope.row.deviceStatus === 1 ? '开' : '关' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" fixed="right" width="200">
+        <el-table-column prop="fieldUnitId" label="地块/基本灌溉单元编号" width="200" />
+        <el-table-column label="操作" fixed="right" width="250">
           <template #default="scope">
             <el-button 
               size="small" 
@@ -57,6 +48,13 @@
               :disabled="!hasEditPermission"
             >
               编辑
+            </el-button>
+            <el-button 
+              size="small" 
+              type="success" 
+              @click="handleViewData(scope.row)"
+            >
+              查看数据
             </el-button>
             <el-button 
               size="small" 
@@ -87,69 +85,50 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑设备' : '添加设备'"
-      width="500px"
+      width="600px"
       destroy-on-close
     >
       <el-form
         ref="deviceFormRef"
         :model="deviceForm"
         :rules="deviceRules"
-        label-width="120px"
+        label-width="140px"
         label-position="right"
       >
+        <el-form-item label="设备类型" prop="deviceType">
+          <el-select v-model="deviceForm.deviceType" placeholder="请选择设备类型" style="width: 100%">
+            <el-option
+              v-for="item in deviceTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="设备编号" prop="deviceId">
           <el-input v-model="deviceForm.deviceId" :disabled="isEdit" />
         </el-form-item>
-        <el-form-item label="设备类型" prop="deviceType">
-          <el-select v-model="deviceForm.deviceType" placeholder="请选择设备类型" style="width: 100%">
-            <el-option label="水泵" :value="1" />
-            <el-option label="阀门" :value="2" />
-            <el-option label="传感器" :value="3" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="关联类型" prop="managerType">
-          <el-radio-group v-model="deviceForm.managerType">
-            <el-radio :label="1">分组</el-radio>
-            <el-radio :label="2">灌溉单元</el-radio>
+        <el-form-item label="选择类型" prop="locationType">
+          <el-radio-group v-model="deviceForm.locationType" @change="handleLocationTypeChange">
+            <el-radio :label="1">地块</el-radio>
+            <el-radio :label="2">基本灌溉单元</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="关联编号" prop="deviceManagerNumber">
+        <el-form-item :label="deviceForm.locationType === 1 ? '地块' : '基本灌溉单元'" prop="fieldUnitId">
           <el-select 
-            v-if="deviceForm.managerType === 1"
-            v-model="deviceForm.deviceManagerNumber" 
-            placeholder="请选择分组" 
-            style="width: 100%"
+            v-model="deviceForm.fieldUnitId" 
+            :placeholder="deviceForm.locationType === 1 ? '请选择地块' : '请选择基本灌溉单元'" 
             filterable
-            clearable
+            style="width: 100%"
+            :loading="locationOptionsLoading"
           >
-            <el-option 
-              v-for="group in groupOptions" 
-              :key="group.id" 
-              :label="group.groupName" 
-              :value="group.groupName" 
+            <el-option
+              v-for="item in locationOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
             />
           </el-select>
-          <el-select 
-            v-else
-            v-model="deviceForm.deviceManagerNumber" 
-            placeholder="请选择灌溉单元" 
-            style="width: 100%"
-            filterable
-            clearable
-          >
-            <el-option 
-              v-for="field in fieldOptions" 
-              :key="field.id" 
-              :label="field.fieldUnitId" 
-              :value="field.fieldUnitId" 
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备状态" prop="deviceStatus">
-          <el-radio-group v-model="deviceForm.deviceStatus">
-            <el-radio :label="1">开</el-radio>
-            <el-radio :label="0">关</el-radio>
-          </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -161,11 +140,38 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 设备数据对话框 -->
+    <el-dialog
+      v-model="dataDialogVisible"
+      title="设备数据"
+      width="800px"
+      destroy-on-close
+    >
+      <div v-loading="dataLoading">
+        <div v-if="deviceData.length > 0">
+          <el-table
+            :data="deviceData"
+            border
+            style="width: 100%"
+            height="400px"
+          >
+            <el-table-column prop="timestamp" label="时间" width="180" />
+            <el-table-column prop="value" label="数值" width="120" />
+            <el-table-column prop="unit" label="单位" width="100" />
+            <el-table-column prop="type" label="数据类型" />
+          </el-table>
+        </div>
+        <div v-else class="empty-data">
+          暂无设备数据
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
@@ -185,30 +191,92 @@ const isEdit = ref(false)
 const deviceFormRef = ref(null)
 const submitLoading = ref(false)
 
+// 设备数据对话框相关
+const dataDialogVisible = ref(false)
+const dataLoading = ref(false)
+const deviceData = ref([])
+const currentDevice = ref(null)
+
 // 设备表单
 const deviceForm = reactive({
-  id: null,
+  id: '',
   deviceId: '',
-  deviceType: 1,
-  managerType: 1, // 1: 分组, 2: 灌溉单元
-  deviceManagerNumber: '',
-  deviceStatus: 1
+  deviceType: '',
+  fieldUnitId: '',
+  locationType: 1 // 默认选择地块
 })
+
+// 设备类型选项
+const deviceTypeOptions = [
+  { value: 0, label: '阀门' },
+  { value: 1, label: '水闸' },
+  { value: 2, label: '施肥机' }
+]
+
+// 地块/基本灌溉单元选项
+const locationOptions = ref([])
+const locationOptionsLoading = ref(false)
+
+// 处理位置类型变化
+const handleLocationTypeChange = () => {
+  deviceForm.fieldUnitId = '' // 清空已选择的值
+  getLocationOptions() // 重新获取选项
+}
+
+// 获取地块/基本灌溉单元选项
+const getLocationOptions = async () => {
+  locationOptionsLoading.value = true
+  locationOptions.value = []
+  
+  try {
+    let url = deviceForm.locationType === 1 
+      ? '/api/field/list/field'  // 获取地块列表
+      : '/api/field/list/unit'        // 获取灌溉单元列表
+    
+    const response = await axios.get(url)
+    
+    if (response.data.code === 200) {
+      if (deviceForm.locationType === 1) {
+        // 地块选项
+        locationOptions.value = (response.data.value || [])
+          .map(item => ({
+            value: item.fieldId,
+            label: `${item.fieldId}`
+          }))
+      } else {
+        // 基本灌溉单元选项
+        locationOptions.value = (response.data.value || [])
+          .filter(item => item.fieldUnitId) // 只保留有灌溉单元编号的记录
+          .map(item => ({
+            value: item.fieldUnitId,
+            label: `${item.fieldUnitId}`
+          }))
+      }
+    } else {
+      ElMessage.error(response.data.msg || '获取选项列表失败')
+    }
+  } catch (error) {
+    console.error('获取选项列表出错:', error)
+    ElMessage.error('获取选项列表失败，请稍后重试')
+  } finally {
+    locationOptionsLoading.value = false
+  }
+}
 
 // 表单验证规则
 const deviceRules = {
   deviceId: [
     { required: true, message: '请输入设备编号', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
   ],
   deviceType: [
     { required: true, message: '请选择设备类型', trigger: 'change' }
   ],
-  managerType: [
-    { required: true, message: '请选择关联类型', trigger: 'change' }
+  locationType: [
+    { required: true, message: '请选择类型', trigger: 'change' }
   ],
-  deviceManagerNumber: [
-    { required: true, message: '请选择或输入关联编号', trigger: 'blur' }
+  fieldUnitId: [
+    { required: true, message: '请选择地块/基本灌溉单元', trigger: 'change' }
   ]
 }
 
@@ -225,74 +293,9 @@ const hasDeletePermission = computed(() => {
 
 // 获取设备类型名称
 const getDeviceTypeName = (type) => {
-  const typeMap = {
-    1: '水泵',
-    2: '阀门',
-    3: '传感器'
-  }
-  return typeMap[type] || '未知'
+  const option = deviceTypeOptions.find(item => item.value === type)
+  return option ? option.label : '未知类型'
 }
-
-// 获取设备类型标签样式
-const getDeviceTypeTag = (type) => {
-  const typeTagMap = {
-    1: 'primary',
-    2: 'success',
-    3: 'warning'
-  }
-  return typeTagMap[type] || 'info'
-}
-
-// 分组选项和灌溉单元选项
-const groupOptions = ref([])
-const fieldOptions = ref([])
-
-// 加载分组选项
-const loadGroupOptions = async () => {
-  try {
-    const response = await axios.get('/api/group/list')
-    
-    if (response.data.code === 200) {
-      groupOptions.value = response.data.value || []
-    } else {
-      ElMessage.error(response.data.msg || '获取分组列表失败')
-    }
-  } catch (error) {
-    console.error('加载分组选项出错:', error)
-    ElMessage.error('加载分组选项失败，请稍后重试')
-  }
-}
-
-// 加载灌溉单元选项
-const loadFieldOptions = async () => {
-  try {
-    const response = await axios.get('/api/field/list')
-    
-    if (response.data.code === 200) {
-      fieldOptions.value = response.data.value || []
-    } else {
-      ElMessage.error(response.data.msg || '获取灌溉单元列表失败')
-    }
-  } catch (error) {
-    console.error('加载灌溉单元选项出错:', error)
-    ElMessage.error('加载灌溉单元选项失败，请稍后重试')
-  }
-}
-
-// 监听关联类型变化，加载相应的选项
-watch(() => deviceForm.managerType, (newValue) => {
-  if (newValue === 1) {
-    // 如果选择分组，加载分组选项
-    if (groupOptions.value.length === 0) {
-      loadGroupOptions()
-    }
-  } else {
-    // 如果选择灌溉单元，加载灌溉单元选项
-    if (fieldOptions.value.length === 0) {
-      loadFieldOptions()
-    }
-  }
-})
 
 // 加载设备列表
 const loadDeviceList = async () => {
@@ -302,45 +305,39 @@ const loadDeviceList = async () => {
   try {
     const params = {
       page: currentPage.value,
-      pageSize: pageSize.value,
-      query: searchQuery.value
+      pageSize: pageSize.value
+    }
+    
+    // 如果有搜索关键字，添加到请求参数中
+    if (searchQuery.value) {
+      params.query = searchQuery.value
     }
     
     const response = await axios.get('/api/device/query/page', { params })
     
     if (response.data.code === 200) {
-      const data = response.data.value || {}  // 使用value而不是data
-      deviceList.value = data.records || []
-      total.value = data.total || 0
+      deviceList.value = response.data.value.records || []
+      total.value = response.data.value.total || 0
       
       // 如果没有数据
       if (deviceList.value.length === 0) {
         emptyText.value = searchQuery.value ? '没有找到匹配的设备' : '暂无设备数据'
       }
     } else {
-      ElMessage.error(response.data.msg || '获取设备列表失败')  // 使用msg而不是message
-      emptyText.value = '加载失败'
+      ElMessage.error(response.data.msg || '获取设备列表失败')
+      deviceList.value = []
+      total.value = 0
+      emptyText.value = '获取数据失败'
     }
   } catch (error) {
-    console.error('加载设备列表出错:', error)
-    ElMessage.error('加载设备列表失败，请稍后重试')
-    emptyText.value = '加载失败'
+    console.error('获取设备列表出错:', error)
+    ElMessage.error('获取设备列表失败，请稍后重试')
+    deviceList.value = []
+    total.value = 0
+    emptyText.value = '获取数据失败'
   } finally {
     loading.value = false
   }
-}
-
-// 处理页码变化
-const handleCurrentChange = (page) => {
-  currentPage.value = page
-  loadDeviceList()
-}
-
-// 处理每页条数变化
-const handleSizeChange = (size) => {
-  pageSize.value = size
-  currentPage.value = 1
-  loadDeviceList()
 }
 
 // 处理搜索
@@ -349,75 +346,49 @@ const handleSearch = () => {
   loadDeviceList()
 }
 
+// 处理分页大小变化
+const handleSizeChange = (val) => {
+  pageSize.value = val
+  currentPage.value = 1 // 重置到第一页
+  loadDeviceList()
+}
+
+// 处理当前页变化
+const handleCurrentChange = (val) => {
+  currentPage.value = val
+  loadDeviceList()
+}
+
 // 处理添加设备
 const handleAddDevice = () => {
   isEdit.value = false
-  Object.keys(deviceForm).forEach(key => {
-    if (key === 'deviceType' || key === 'deviceStatus') {
-      deviceForm[key] = 1
-    } else if (key === 'managerType') {
-      deviceForm[key] = 1 // 默认选择分组
-    } else if (key === 'id') {
-      deviceForm[key] = null // 确保添加时id为null
-    } else {
-      deviceForm[key] = ''
-    }
-  })
+  deviceForm.id = ''
+  deviceForm.deviceId = ''
+  deviceForm.deviceType = ''
+  deviceForm.fieldUnitId = ''
+  deviceForm.locationType = 1 // 默认选择地块
   dialogVisible.value = true
   
-  // 加载分组选项
-  loadGroupOptions()
+  // 获取地块选项
+  getLocationOptions()
 }
 
 // 处理编辑设备
 const handleEditDevice = (row) => {
   isEdit.value = true
-  
-  // 复制行数据到表单
-  Object.keys(deviceForm).forEach(key => {
-    if (key in row) {
-      deviceForm[key] = row[key]
-    }
-  })
-  
-  // 确保id字段被正确设置
   deviceForm.id = row.id
+  deviceForm.deviceId = row.deviceId
+  deviceForm.deviceType = row.deviceType
+  deviceForm.fieldUnitId = row.fieldUnitId
   
-  // 加载分组和灌溉单元选项
-  loadGroupOptions()
-  loadFieldOptions()
-  
-  // 根据设备的deviceManagerNumber判断关联类型
-  nextTick(async () => {
-    // 等待选项加载完成后再判断
-    await Promise.all([
-      new Promise(resolve => {
-        if (groupOptions.value.length > 0) resolve()
-        else setTimeout(resolve, 500) // 如果选项还没加载，等待一段时间
-      }),
-      new Promise(resolve => {
-        if (fieldOptions.value.length > 0) resolve()
-        else setTimeout(resolve, 500)
-      })
-    ])
-    
-    if (row.deviceManagerNumber) {
-      // 检查是否匹配任何分组名称
-      if (groupOptions.value.some(g => g.groupName === row.deviceManagerNumber)) {
-        deviceForm.managerType = 1 // 分组
-      } 
-      // 检查是否匹配任何灌溉单元编号
-      else if (fieldOptions.value.some(f => f.fieldUnitId === row.deviceManagerNumber)) {
-        deviceForm.managerType = 2 // 灌溉单元
-      }
-      // 如果都不匹配，默认为灌溉单元
-      else {
-        deviceForm.managerType = 2
-      }
-    }
-  })
+  // 根据fieldUnitId判断是地块还是基本灌溉单元
+  // 这里需要根据实际情况调整判断逻辑
+  deviceForm.locationType = row.isField ? 1 : 2
   
   dialogVisible.value = true
+  
+  // 获取选项
+  getLocationOptions()
 }
 
 // 处理删除设备
@@ -432,13 +403,13 @@ const handleDeleteDevice = (row) => {
     }
   ).then(async () => {
     try {
-      const response = await axios.delete(`/api/device/${row.deviceId}`)
+      const response = await axios.delete(`/api/device/delete/${row.id}`)
       
       if (response.data.code === 200) {
         ElMessage.success('删除成功')
         loadDeviceList()
       } else {
-        ElMessage.error(response.data.msg || '删除失败')  // 使用msg而不是message
+        ElMessage.error(response.data.msg || '删除失败')
       }
     } catch (error) {
       console.error('删除设备出错:', error)
@@ -447,6 +418,29 @@ const handleDeleteDevice = (row) => {
   }).catch(() => {
     // 取消删除
   })
+}
+
+// 查看设备数据
+const handleViewData = async (row) => {
+  currentDevice.value = row
+  dataDialogVisible.value = true
+  dataLoading.value = true
+  deviceData.value = []
+  
+  try {
+    const response = await axios.get(`/api/device/data/${row.id}`)
+    
+    if (response.data.code === 200) {
+      deviceData.value = response.data.value || []
+    } else {
+      ElMessage.error(response.data.msg || '获取设备数据失败')
+    }
+  } catch (error) {
+    console.error('获取设备数据出错:', error)
+    ElMessage.error('获取设备数据失败，请稍后重试')
+  } finally {
+    dataLoading.value = false
+  }
 }
 
 // 提交设备表单
@@ -458,27 +452,23 @@ const submitDeviceForm = async () => {
       submitLoading.value = true
       
       try {
+        // 构建提交的数据
+        const submitData = {
+          id: deviceForm.id,
+          deviceId: deviceForm.deviceId,
+          deviceType: deviceForm.deviceType,
+          deviceManagerNumber: deviceForm.fieldUnitId,
+          isField: deviceForm.locationType === 1 // 添加标识是地块还是基本灌溉单元
+        }
+        
         let response
         
         if (isEdit.value) {
-          // 编辑设备 - 确保包含id字段
-          const updateData = {
-            id: deviceForm.id,
-            deviceId: deviceForm.deviceId,
-            deviceType: deviceForm.deviceType,
-            deviceManagerNumber: deviceForm.deviceManagerNumber,
-            deviceStatus: deviceForm.deviceStatus
-          }
-          response = await axios.put('/api/device/update', updateData)
+          // 编辑设备
+          response = await axios.put('/api/device/update', submitData)
         } else {
-          // 添加设备 - 不需要id字段
-          const addData = {
-            deviceId: deviceForm.deviceId,
-            deviceType: deviceForm.deviceType,
-            deviceManagerNumber: deviceForm.deviceManagerNumber,
-            deviceStatus: deviceForm.deviceStatus
-          }
-          response = await axios.post('/api/device/add', addData)
+          // 添加设备
+          response = await axios.post('/api/device/add', submitData)
         }
         
         if (response.data.code === 200) {
@@ -498,6 +488,13 @@ const submitDeviceForm = async () => {
   })
 }
 
+// 监听位置类型变化
+watch(() => deviceForm.locationType, () => {
+  if (dialogVisible.value) {
+    getLocationOptions()
+  }
+})
+
 // 页面加载时获取设备列表
 onMounted(() => {
   loadDeviceList()
@@ -507,6 +504,13 @@ onMounted(() => {
 <style scoped>
 .device-management {
   width: 100%;
+}
+
+.content-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  padding: 20px;
 }
 
 .card-header {
@@ -524,5 +528,12 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.empty-data {
+  padding: 30px 0;
+  text-align: center;
+  color: #909399;
+  font-size: 14px;
 }
 </style> 
