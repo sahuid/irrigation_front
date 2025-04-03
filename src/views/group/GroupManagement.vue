@@ -334,7 +334,7 @@ const handleEditGroup = (row) => {
 // 处理删除分组
 const handleDeleteGroup = (row) => {
   ElMessageBox.confirm(
-    `确定要删除分组 "${row.groupName}" 吗？`,
+    `确定要删除分组 "${row.groupName}" 吗？这将同时解除与所有地块的关联。`,
     '删除确认',
     {
       confirmButtonText: '确定',
@@ -343,7 +343,9 @@ const handleDeleteGroup = (row) => {
     }
   ).then(async () => {
     try {
-      const response = await axios.delete(`/api/group/delete/${row.id}`)
+      const response = await axios.delete('/api/group/delete', {
+        params: { groupId: row.id }
+      })
       
       if (response.data.code === 200) {
         ElMessage.success('删除成功')

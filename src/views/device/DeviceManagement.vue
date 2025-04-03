@@ -38,7 +38,7 @@
             {{ getDeviceTypeName(scope.row.deviceType) }}
           </template>
         </el-table-column>
-        <el-table-column prop="fieldUnitId" label="地块/基本灌溉单元编号" width="200" />
+        <el-table-column prop="deviceManagerNumber" label="地块/基本灌溉单元编号" width="200" />
         <el-table-column label="操作" fixed="right" width="250">
           <template #default="scope">
             <el-button 
@@ -114,9 +114,9 @@
             <el-radio :label="2">基本灌溉单元</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item :label="deviceForm.locationType === 1 ? '地块' : '基本灌溉单元'" prop="fieldUnitId">
+        <el-form-item :label="deviceForm.locationType === 1 ? '地块' : '基本灌溉单元'" prop="deviceManagerNumber">
           <el-select 
-            v-model="deviceForm.fieldUnitId" 
+            v-model="deviceForm.deviceManagerNumber" 
             :placeholder="deviceForm.locationType === 1 ? '请选择地块' : '请选择基本灌溉单元'" 
             filterable
             style="width: 100%"
@@ -202,7 +202,7 @@ const deviceForm = reactive({
   id: '',
   deviceId: '',
   deviceType: '',
-  fieldUnitId: '',
+  deviceManagerNumber: '',
   locationType: 1 // 默认选择地块
 })
 
@@ -219,7 +219,7 @@ const locationOptionsLoading = ref(false)
 
 // 处理位置类型变化
 const handleLocationTypeChange = () => {
-  deviceForm.fieldUnitId = '' // 清空已选择的值
+  deviceForm.deviceManagerNumber = '' // 清空已选择的值
   getLocationOptions() // 重新获取选项
 }
 
@@ -275,7 +275,7 @@ const deviceRules = {
   locationType: [
     { required: true, message: '请选择类型', trigger: 'change' }
   ],
-  fieldUnitId: [
+  deviceManagerNumber: [
     { required: true, message: '请选择地块/基本灌溉单元', trigger: 'change' }
   ]
 }
@@ -365,7 +365,7 @@ const handleAddDevice = () => {
   deviceForm.id = ''
   deviceForm.deviceId = ''
   deviceForm.deviceType = ''
-  deviceForm.fieldUnitId = ''
+  deviceForm.deviceManagerNumber = ''
   deviceForm.locationType = 1 // 默认选择地块
   dialogVisible.value = true
   
@@ -379,9 +379,9 @@ const handleEditDevice = (row) => {
   deviceForm.id = row.id
   deviceForm.deviceId = row.deviceId
   deviceForm.deviceType = row.deviceType
-  deviceForm.fieldUnitId = row.fieldUnitId
+  deviceForm.deviceManagerNumber = row.deviceManagerNumber
   
-  // 根据fieldUnitId判断是地块还是基本灌溉单元
+  // 根据deviceManagerNumber判断是地块还是基本灌溉单元
   // 这里需要根据实际情况调整判断逻辑
   deviceForm.locationType = row.isField ? 1 : 2
   
@@ -403,7 +403,9 @@ const handleDeleteDevice = (row) => {
     }
   ).then(async () => {
     try {
-      const response = await axios.delete(`/api/device/delete/${row.id}`)
+      const response = await axios.delete('/api/device/delete', {
+        params: { deviceId: row.id }
+      })
       
       if (response.data.code === 200) {
         ElMessage.success('删除成功')
@@ -457,7 +459,7 @@ const submitDeviceForm = async () => {
           id: deviceForm.id,
           deviceId: deviceForm.deviceId,
           deviceType: deviceForm.deviceType,
-          deviceManagerNumber: deviceForm.fieldUnitId,
+          deviceManagerNumber: deviceForm.deviceManagerNumber,
           isField: deviceForm.locationType === 1 // 添加标识是地块还是基本灌溉单元
         }
         
