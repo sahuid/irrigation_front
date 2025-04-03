@@ -7,13 +7,13 @@
           placeholder="搜索地块编号或名称"
           clearable
           @clear="getFieldList"
-          @keyup.enter="getFieldList"
+          @keyup.enter="handleSearch"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
           <template #append>
-            <el-button @click="getFieldList">搜索</el-button>
+            <el-button @click="handleSearch">搜索</el-button>
           </template>
         </el-input>
         <el-button type="primary" @click="handleAdd">
@@ -43,20 +43,12 @@
             {{ scope.row.fieldSize || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="fieldRange" label="位置信息" width="120">
+        <el-table-column prop="fieldRange" label="位置信息" width="180">
           <template #default="scope">
-            <el-button 
-              size="small" 
-              type="info" 
-              @click="showLocation(scope.row.fieldRange)"
-              v-if="scope.row.fieldRange"
-            >
-              <el-icon><Location /></el-icon>查看
-            </el-button>
-            <span v-else>-</span>
+            {{ scope.row.fieldRange || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="350">
+        <el-table-column label="操作" fixed="right" width="250">
           <template #default="scope">
             <el-button 
               size="small" 
@@ -65,14 +57,6 @@
               :disabled="!hasEditPermission"
             >
               编辑
-            </el-button>
-            <el-button 
-              size="small" 
-              type="success" 
-              @click="handleAddToGroup(scope.row)"
-              v-if="!scope.row.fieldParent"
-            >
-              添加到分组
             </el-button>
             <el-button 
               size="small" 
@@ -107,12 +91,13 @@
       </div>
     </div>
 
-    <!-- 表单对话框 -->
+    <!-- 表单对话框 - 父级地块 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
       width="500px"
       destroy-on-close
+      v-if="!isEditingIrrigationUnit"
     >
       <el-form
         ref="formRef"
@@ -122,7 +107,7 @@
         label-position="right"
       >
         <el-form-item label="地块编号" prop="fieldId">
-          <el-input v-model="fieldForm.fieldId" :disabled="isEdit && fieldForm.fieldParent" />
+          <el-input v-model="fieldForm.fieldId" />
         </el-form-item>
         <el-form-item label="地块名称" prop="fieldName">
           <el-input v-model="fieldForm.fieldName" />
@@ -132,9 +117,6 @@
         </el-form-item>
         <el-form-item label="位置信息" prop="fieldRange">
           <el-input v-model="fieldForm.fieldRange" placeholder="经纬度坐标，如: (1,1,2,2,3,3)" />
-        </el-form-item>
-        <el-form-item v-if="isEdit && fieldForm.fieldParent" label="灌溉单元编号" prop="fieldUnitId">
-          <el-input v-model="fieldForm.fieldUnitId" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -146,55 +128,42 @@
         </span>
       </template>
     </el-dialog>
-
-    <!-- 位置信息对话框 -->
-    <el-dialog
-      v-model="locationDialogVisible"
-      title="位置信息详情"
-      width="400px"
-    >
-      <div>
-        <p>坐标: {{ currentLocation }}</p>
-        <!-- 这里可以添加地图组件 -->
-      </div>
-    </el-dialog>
     
-    <!-- 添加到分组对话框 -->
+    <!-- 表单对话框 - 灌溉单元 -->
     <el-dialog
-      v-model="groupDialogVisible"
-      title="添加到分组"
+      v-model="dialogVisible"
+      :title="dialogTitle"
       width="500px"
+      destroy-on-close
+      v-if="isEditingIrrigationUnit"
     >
       <el-form
-        ref="groupFormRef"
-        :model="groupForm"
-        :rules="groupRules"
+        ref="formRef"
+        :model="fieldForm"
+        :rules="irrigationUnitEditRules"
         label-width="120px"
+        label-position="right"
       >
-        <el-form-item label="地块名称">
-          <el-input v-model="selectedFieldName" disabled />
+        <el-form-item label="灌溉单元编号" prop="fieldUnitId">
+          <el-input v-model="fieldForm.fieldUnitId" />
         </el-form-item>
-        <el-form-item label="选择分组" prop="groupId">
-          <el-select v-model="groupForm.groupId" placeholder="请选择分组" style="width: 100%">
-            <el-option
-              v-for="item in groupOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+        <el-form-item label="灌溉面积" prop="fieldSize">
+          <el-input-number v-model="fieldForm.fieldSize" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="位置信息" prop="fieldRange">
+          <el-input v-model="fieldForm.fieldRange" placeholder="经纬度坐标，如: (1,1,2,2,3,3)" />
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="groupDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitAddToGroup" :loading="groupSubmitLoading">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitForm" :loading="formLoading">
             确定
           </el-button>
         </span>
       </template>
     </el-dialog>
-
+    
     <!-- 设置基本灌溉单元对话框 -->
     <el-dialog
       v-model="irrigationUnitDialogVisible"
@@ -236,14 +205,12 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Search, Plus, Location } from '@element-plus/icons-vue'
+import { Search, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 
+// API基础URL
 const API_BASE_URL = '/api'
-
-// 搜索关键字
-const searchKeyword = ref('')
 
 // 表格数据
 const fieldList = ref([])
@@ -251,34 +218,15 @@ const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const searchKeyword = ref('')
 
-// 位置信息详情对话框
-const locationDialogVisible = ref(false)
-const currentLocation = ref('')
-
-// 表单对话框
+// 对话框控制
 const dialogVisible = ref(false)
 const dialogTitle = ref('添加地块')
 const formLoading = ref(false)
 const isEdit = ref(false)
+const isEditingIrrigationUnit = ref(false)
 const formRef = ref(null)
-
-// 添加到分组对话框
-const groupDialogVisible = ref(false)
-const groupForm = reactive({
-  fieldId: '',
-  groupId: ''
-})
-const groupFormRef = ref(null)
-const groupSubmitLoading = ref(false)
-const selectedFieldName = ref('')
-const groupOptions = ref([])
-
-// 设置基本灌溉单元对话框
-const irrigationUnitDialogVisible = ref(false)
-const irrigationUnitFormRef = ref(null)
-const irrigationUnitLoading = ref(false)
-const selectedFieldInfo = ref('')
 
 // 灌溉单元表单
 const irrigationUnitForm = reactive({
@@ -314,6 +262,19 @@ const rules = {
   ]
 }
 
+// 灌溉单元编辑表单验证规则
+const irrigationUnitEditRules = {
+  fieldUnitId: [
+    { required: true, message: '请输入灌溉单元编号', trigger: 'blur' }
+  ],
+  fieldSize: [
+    { required: true, message: '请输入灌溉面积', trigger: 'blur' }
+  ],
+  fieldRange: [
+    { required: true, message: '请输入位置信息', trigger: 'blur' }
+  ]
+}
+
 // 灌溉单元表单验证规则
 const irrigationUnitRules = {
   fieldUnitId: [
@@ -327,12 +288,11 @@ const irrigationUnitRules = {
   ]
 }
 
-// 分组表单验证规则
-const groupRules = {
-  groupId: [
-    { required: true, message: '请选择分组', trigger: 'change' }
-  ]
-}
+// 设置基本灌溉单元对话框
+const irrigationUnitDialogVisible = ref(false)
+const irrigationUnitFormRef = ref(null)
+const irrigationUnitLoading = ref(false)
+const selectedFieldInfo = ref('')
 
 // 权限控制
 const hasEditPermission = computed(() => {
@@ -363,13 +323,23 @@ const getFieldList = async () => {
       total.value = response.data.value.total || 0
     } else {
       ElMessage.error(response.data.msg || '获取地块列表失败')
+      fieldList.value = []
+      total.value = 0
     }
   } catch (error) {
     console.error('获取地块列表出错:', error)
     ElMessage.error('获取地块列表失败，请稍后重试')
+    fieldList.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
+}
+
+// 处理搜索
+const handleSearch = () => {
+  currentPage.value = 1
+  getFieldList()
 }
 
 // 处理分页大小变化
@@ -384,15 +354,10 @@ const handleCurrentChange = (val) => {
   getFieldList()
 }
 
-// 显示位置信息
-const showLocation = (location) => {
-  currentLocation.value = location
-  locationDialogVisible.value = true
-}
-
-// 添加地块
+// 处理添加地块
 const handleAdd = () => {
   isEdit.value = false
+  isEditingIrrigationUnit.value = false
   dialogTitle.value = '添加地块'
   
   // 重置表单
@@ -407,9 +372,10 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-// 编辑地块
+// 处理编辑地块
 const handleEditField = (row) => {
   isEdit.value = true
+  isEditingIrrigationUnit.value = !!row.fieldParent
   dialogTitle.value = row.fieldParent ? '编辑灌溉单元' : '编辑地块'
   
   // 填充表单数据
@@ -424,7 +390,7 @@ const handleEditField = (row) => {
   dialogVisible.value = true
 }
 
-// 删除地块
+// 处理删除地块
 const handleDeleteField = (row) => {
   ElMessageBox.confirm(
     `确定要删除${row.fieldParent ? '灌溉单元' : '地块'} "${row.fieldName || row.fieldId}" 吗？`,
@@ -486,69 +452,6 @@ const submitForm = async () => {
         ElMessage.error(isEdit.value ? '更新失败，请稍后重试' : '添加失败，请稍后重试')
       } finally {
         formLoading.value = false
-      }
-    }
-  })
-}
-
-// 加载分组选项
-const loadGroupOptions = async () => {
-  try {
-    const response = await axios.get('/api/group/list')
-    
-    if (response.data.code === 200) {
-      const groups = response.data.value || []
-      groupOptions.value = groups.map(group => ({
-        value: group.id,  // 使用id作为值
-        label: group.groupName  // 使用groupName作为标签
-      }))
-    }
-  } catch (error) {
-    console.error('加载分组选项出错:', error)
-    ElMessage.error('加载分组选项失败')
-  }
-}
-
-// 处理添加到分组
-const handleAddToGroup = (row) => {
-  // 使用地块的id而不是地块编号
-  groupForm.fieldId = row.id
-  selectedFieldName.value = row.fieldName || row.fieldId
-  groupForm.groupId = ''
-  groupDialogVisible.value = true
-  
-  // 加载分组选项
-  loadGroupOptions()
-}
-
-// 提交添加到分组
-const submitAddToGroup = async () => {
-  if (!groupFormRef.value) return
-  
-  await groupFormRef.value.validate(async (valid) => {
-    if (valid) {
-      groupSubmitLoading.value = true
-      
-      try {
-        // 确保发送的数据符合后端API的要求
-        const postData = {
-          fieldId: groupForm.fieldId, // 这里使用的是地块的id
-          groupId: groupForm.groupId
-        }
-        
-        const response = await axios.post('/api/field/to/group', postData)
-        
-        if (response.data.code === 200) {
-          ElMessage.success('添加到分组成功')
-          groupDialogVisible.value = false
-        } else {
-          ElMessage.error(response.data.msg || '添加到分组失败')
-        }
-      } catch (error) {
-        console.error('添加到分组出错:', error)
-        ElMessage.error('添加到分组失败，请稍后重试')
-      } finally {
-        groupSubmitLoading.value = false
       }
     }
   })
