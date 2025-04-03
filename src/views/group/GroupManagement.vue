@@ -125,7 +125,7 @@
     <el-dialog
       v-model="fieldDialogVisible"
       title="关联地块列表"
-      width="800px"
+      width="900px"
       destroy-on-close
       :append-to-body="true"
     >
@@ -136,12 +136,13 @@
         v-loading="fieldLoading"
         height="400px"
       >
-        <el-table-column prop="id" label="地块ID" width="100" />
-        <el-table-column prop="fieldId" label="地块编号" width="150" />
-        <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="180" />
-        <el-table-column prop="fieldName" label="地块名称" width="180" />
-        <el-table-column prop="fieldSize" label="灌溉面积" width="120" />
-        <el-table-column prop="fieldRange" label="地块范围" />
+        <el-table-column prop="id" label="地块ID" width="80" />
+        <el-table-column prop="fieldId" label="地块编号" width="120" />
+        <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="120" />
+        <el-table-column prop="fieldName" label="地块名称" width="150" />
+        <el-table-column prop="fieldSize" label="灌溉面积" width="100" />
+        <el-table-column prop="fieldRange" label="地块范围" width="120" />
+        <el-table-column prop="groupId" label="分组ID" width="80" />
       </el-table>
       <template #footer>
         <span class="dialog-footer">
