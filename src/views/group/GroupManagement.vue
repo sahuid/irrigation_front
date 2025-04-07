@@ -39,7 +39,14 @@
             {{ scope.row.fieldList ? scope.row.fieldList.length : 0 }}
           </template>
         </el-table-column>
-        <el-table-column prop="locationInfo" label="位置信息" min-width="200" />
+        <el-table-column prop="groupRange" label="位置信息" width="300">
+          <template #default="scope">
+            <span v-if="scope.row.groupRange">
+              {{ typeof scope.row.groupRange === 'string' ? scope.row.groupRange : JSON.stringify(scope.row.groupRange) }}
+            </span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" fixed="right" width="400">
           <template #default="scope">
             <el-button 
@@ -109,6 +116,55 @@
         </el-form-item>
         <el-form-item label="分组名称" prop="groupName">
           <el-input v-model="groupForm.groupName" />
+        </el-form-item>
+        <el-form-item label="位置信息" prop="groupRange">
+          <div class="location-table">
+            <div class="location-table-header">
+              <div>
+                <el-button type="primary" size="small" @click="addGroupLocationPoint">
+                  <el-icon><Plus /></el-icon>添加位置点
+                </el-button>
+                <el-button type="warning" size="small" @click="resetGroupLocationInfo">
+                  重置位置
+                </el-button>
+              </div>
+              <span class="location-hint">至少需要3个点才能形成有效的范围</span>
+            </div>
+            <el-table :data="groupForm.groupRange" border style="width: 100%">
+              <el-table-column label="序号" type="index" width="60" />
+              <el-table-column label="经度" prop="longitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.longitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="纬度" prop="latitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.latitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80">
+                <template #default="scope">
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="removeGroupLocationPoint(scope.$index)"
+                    circle
+                    icon="Delete"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -226,7 +282,8 @@ const groupFields = ref([])
 // 分组表单
 const groupForm = reactive({
   id: '',
-  groupName: ''
+  groupName: '',
+  groupRange: []
 })
 
 // 表单验证规则
@@ -272,7 +329,14 @@ const loadGroupList = async () => {
     const response = await axios.get('/api/group/query/page', { params })
     
     if (response.data.code === 200) {
-      groupList.value = response.data.value.records || []
+      const records = response.data.value.records || []
+      
+      // 检查第一条记录的位置信息格式
+      if (records.length > 0) {
+        console.log('获取到的第一条记录的位置信息:', records[0].groupRange, typeof records[0].groupRange)
+      }
+      
+      groupList.value = records
       total.value = response.data.value.total || 0
       
       // 如果没有数据
@@ -320,6 +384,7 @@ const handleAddGroup = () => {
   isEdit.value = false
   groupForm.id = ''
   groupForm.groupName = ''
+  groupForm.groupRange = []
   dialogVisible.value = true
 }
 
@@ -328,6 +393,21 @@ const handleEditGroup = (row) => {
   isEdit.value = true
   groupForm.id = row.id
   groupForm.groupName = row.groupName
+  
+  // 处理位置信息
+  try {
+    if (typeof row.groupRange === 'string') {
+      groupForm.groupRange = JSON.parse(row.groupRange)
+    } else if (Array.isArray(row.groupRange)) {
+      groupForm.groupRange = row.groupRange
+    } else {
+      groupForm.groupRange = []
+    }
+  } catch (e) {
+    console.error('解析位置信息出错:', e, '原始数据:', row.groupRange)
+    groupForm.groupRange = []
+  }
+  
   dialogVisible.value = true
 }
 
@@ -398,14 +478,27 @@ const submitGroupForm = async () => {
       submitLoading.value = true
       
       try {
+        // 检查是否有位置点
+        if (groupForm.groupRange.length < 3) {
+          ElMessage.warning('请至少添加3个位置点以形成有效的范围')
+          submitLoading.value = false
+          return
+        }
+        
+        // 构造提交的数据
+        const submitData = {
+          ...groupForm,
+          groupRange: groupForm.groupRange // 直接使用位置点数组
+        }
+        
         let response
         
         if (isEdit.value) {
           // 编辑分组
-          response = await axios.put('/api/group/update', groupForm)
+          response = await axios.put('/api/group/update', submitData)
         } else {
           // 添加分组
-          response = await axios.post('/api/group/add', groupForm)
+          response = await axios.post('/api/group/add', submitData)
         }
         
         if (response.data.code === 200) {
@@ -545,6 +638,22 @@ const handleAddIrrigationUnit = (row) => {
   getIrrigationUnitList()
 }
 
+// 位置点处理函数
+const addGroupLocationPoint = () => {
+  groupForm.groupRange.push({
+    longitude: 116.4074,
+    latitude: 39.9042
+  })
+}
+
+const removeGroupLocationPoint = (index) => {
+  groupForm.groupRange.splice(index, 1)
+}
+
+const resetGroupLocationInfo = () => {
+  groupForm.groupRange = []
+}
+
 // 页面加载时获取分组列表
 onMounted(() => {
   loadGroupList()
@@ -597,5 +706,21 @@ onUnmounted(() => {
   margin-bottom: 15px;
   display: flex;
   justify-content: flex-end;
+}
+
+.location-table {
+  margin-bottom: 20px;
+}
+
+.location-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.location-hint {
+  color: #909399;
+  font-size: 12px;
 }
 </style> 

@@ -27,6 +27,10 @@
             <el-icon><Monitor /></el-icon>
             <span>设备管理</span>
           </el-menu-item>
+          <el-menu-item index="/argument" class="menu-item">
+            <el-icon><Setting /></el-icon>
+            <span>灌溉参数</span>
+          </el-menu-item>
           <el-menu-item index="/task" class="menu-item">
             <el-icon><Timer /></el-icon>
             <span>任务决策管理</span>
@@ -94,7 +98,8 @@ import {
   Connection, 
   Calendar, 
   VideoPlay,
-  FolderOpened  // 导入文件夹图标
+  FolderOpened,  // 导入文件夹图标
+  Setting  // 导入设置图标
 } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 
@@ -124,6 +129,7 @@ const getCurrentPageName = () => {
     '/group': '分组管理',
     '/task': '任务决策管理',
     '/device': '设备管理',
+    '/argument': '灌溉参数',
     '/schedule': '调度方案',
     '/monitor': '实时监控',
     '/websocket': 'WebSocket 测试'

@@ -7,6 +7,7 @@ import WebSocketTest from '../views/websocket/WebSocketTest.vue'
 import ScheduleView from '../views/schedule/ScheduleView.vue'
 import MonitorView from '../views/monitor/MonitorView.vue'
 import LoginView from '../views/auth/LoginView.vue'
+import ArgumentManagement from '../views/argument/ArgumentManagement.vue'
 
 const routes = [
   {
@@ -42,6 +43,12 @@ const routes = [
     path: '/group',
     name: 'Group',
     component: GroupManagement,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/argument',
+    name: 'Argument',
+    component: ArgumentManagement,
     meta: { requiresAuth: true }
   },
   {
