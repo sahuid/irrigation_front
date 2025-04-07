@@ -45,7 +45,10 @@
         </el-table-column>
         <el-table-column prop="fieldRange" label="位置信息" width="180">
           <template #default="scope">
-            {{ scope.row.fieldRange || '-' }}
+            <span v-if="scope.row.fieldRange && scope.row.fieldRange.length > 0">
+              {{ scope.row.fieldRange.length }}个坐标点
+            </span>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" fixed="right" width="250">
@@ -116,7 +119,53 @@
           <el-input-number v-model="fieldForm.fieldSize" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
         <el-form-item label="位置信息" prop="fieldRange">
-          <el-input v-model="fieldForm.fieldRange" placeholder="经纬度坐标，如: (1,1,2,2,3,3)" />
+          <div class="location-table">
+            <div class="location-table-header">
+              <div>
+                <el-button type="primary" size="small" @click="addLocationPoint">
+                  <el-icon><Plus /></el-icon>添加位置点
+                </el-button>
+                <el-button type="warning" size="small" @click="resetLocationInfo">
+                  重置位置
+                </el-button>
+              </div>
+              <span class="location-hint">至少需要3个点才能形成有效的地块范围</span>
+            </div>
+            <el-table :data="fieldForm.fieldRange" border style="width: 100%">
+              <el-table-column label="序号" type="index" width="60" />
+              <el-table-column label="经度" prop="longitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.longitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="纬度" prop="latitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.latitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80">
+                <template #default="scope">
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="removeLocationPoint(scope.$index)"
+                    circle
+                    icon="Delete"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -151,7 +200,53 @@
           <el-input-number v-model="fieldForm.fieldSize" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
         <el-form-item label="位置信息" prop="fieldRange">
-          <el-input v-model="fieldForm.fieldRange" placeholder="经纬度坐标，如: (1,1,2,2,3,3)" />
+          <div class="location-table">
+            <div class="location-table-header">
+              <div>
+                <el-button type="primary" size="small" @click="addIrrigationUnitPoint">
+                  <el-icon><Plus /></el-icon>添加位置点
+                </el-button>
+                <el-button type="warning" size="small" @click="resetIrrigationUnitLocationInfo">
+                  重置位置
+                </el-button>
+              </div>
+              <span class="location-hint">至少需要3个点才能形成有效的地块范围</span>
+            </div>
+            <el-table :data="fieldForm.fieldRange" border style="width: 100%">
+              <el-table-column label="序号" type="index" width="60" />
+              <el-table-column label="经度" prop="longitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.longitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="纬度" prop="latitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.latitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80">
+                <template #default="scope">
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="removeIrrigationUnitPoint(scope.$index)"
+                    circle
+                    icon="Delete"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -188,7 +283,53 @@
           <el-input-number v-model="irrigationUnitForm.fieldSize" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
         <el-form-item label="位置信息" prop="fieldRange">
-          <el-input v-model="irrigationUnitForm.fieldRange" placeholder="经纬度坐标，如: (1,1,2,2,3,3)" />
+          <div class="location-table">
+            <div class="location-table-header">
+              <div>
+                <el-button type="primary" size="small" @click="addIrrigationUnitPoint">
+                  <el-icon><Plus /></el-icon>添加位置点
+                </el-button>
+                <el-button type="warning" size="small" @click="resetIrrigationUnitLocationInfo">
+                  重置位置
+                </el-button>
+              </div>
+              <span class="location-hint">至少需要3个点才能形成有效的地块范围</span>
+            </div>
+            <el-table :data="irrigationUnitForm.fieldRange" border style="width: 100%">
+              <el-table-column label="序号" type="index" width="60" />
+              <el-table-column label="经度" prop="longitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.longitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="纬度" prop="latitude">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.latitude" 
+                    :controls="false" 
+                    :precision="6"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80">
+                <template #default="scope">
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="removeIrrigationUnitPoint(scope.$index)"
+                    circle
+                    icon="Delete"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -234,19 +375,18 @@ const irrigationUnitForm = reactive({
   fieldName: '',
   fieldUnitId: '',
   fieldSize: 0,
-  fieldRange: '',
+  fieldRange: [],
   fieldParent: null
 })
 
 // 表单数据
 const fieldForm = reactive({
-  id: null,
+  id: '',
   fieldId: '',
   fieldName: '',
-  fieldSize: 0,
-  fieldRange: '',
-  fieldUnitId: '',
-  fieldParent: null
+  fieldSize: '',
+  fieldRange: [],
+  irrigationUnit: []
 })
 
 // 表单验证规则
@@ -305,6 +445,46 @@ const hasDeletePermission = computed(() => {
   return true
 })
 
+// 添加位置点
+const addLocationPoint = () => {
+  // 添加一个新的位置点
+  fieldForm.fieldRange.push({
+    longitude: 116.4074,
+    latitude: 39.9042
+  })
+}
+
+// 删除指定索引的位置点
+const removeLocationPoint = (index) => {
+  // 从数组中删除指定索引的位置点
+  fieldForm.fieldRange.splice(index, 1)
+}
+
+// 添加灌溉单元位置点
+const addIrrigationUnitPoint = () => {
+  // 添加一个新的位置点到灌溉单元表单
+  irrigationUnitForm.fieldRange.push({
+    longitude: 116.4074,
+    latitude: 39.9042
+  })
+}
+
+// 删除指定索引的灌溉单元位置点
+const removeIrrigationUnitPoint = (index) => {
+  // 从灌溉单元数组中删除指定索引的位置点
+  irrigationUnitForm.fieldRange.splice(index, 1)
+}
+
+// 重置表单中的位置信息
+const resetLocationInfo = () => {
+  fieldForm.fieldRange = []
+}
+
+// 重置灌溉单元表单中的位置信息
+const resetIrrigationUnitLocationInfo = () => {
+  irrigationUnitForm.fieldRange = []
+}
+
 // 获取地块列表
 const getFieldList = async () => {
   loading.value = true
@@ -361,13 +541,12 @@ const handleAdd = () => {
   dialogTitle.value = '添加地块'
   
   // 重置表单
-  fieldForm.id = null
+  fieldForm.id = ''
   fieldForm.fieldId = ''
   fieldForm.fieldName = ''
-  fieldForm.fieldSize = 0
-  fieldForm.fieldRange = ''
-  fieldForm.fieldUnitId = ''
-  fieldForm.fieldParent = null
+  fieldForm.fieldSize = ''
+  fieldForm.fieldRange = []
+  fieldForm.irrigationUnit = []
   
   dialogVisible.value = true
 }
@@ -383,9 +562,8 @@ const handleEditField = (row) => {
   fieldForm.fieldId = row.fieldId
   fieldForm.fieldName = row.fieldName
   fieldForm.fieldSize = row.fieldSize
-  fieldForm.fieldRange = row.fieldRange
-  fieldForm.fieldUnitId = row.fieldUnitId
-  fieldForm.fieldParent = row.fieldParent
+  fieldForm.fieldRange = row.fieldRange || []
+  fieldForm.irrigationUnit = row.irrigationUnit || []
   
   dialogVisible.value = true
 }
@@ -430,14 +608,26 @@ const submitForm = async () => {
       formLoading.value = true
       
       try {
-        let response
+        // 检查是否至少有3个位置点
+        if (fieldForm.fieldRange.length < 3) {
+          ElMessage.warning('请至少输入3个位置点以形成地块范围')
+          formLoading.value = false
+          return
+        }
         
+        // 构造提交的数据
+        const submitData = {
+          ...fieldForm,
+          fieldRange: fieldForm.fieldRange // 直接使用位置点数组
+        }
+        
+        let response
         if (isEdit.value) {
           // 编辑地块
-          response = await axios.put(`${API_BASE_URL}/field/update`, fieldForm)
+          response = await axios.put('/api/field/update', submitData)
         } else {
           // 添加地块
-          response = await axios.post(`${API_BASE_URL}/field/add`, fieldForm)
+          response = await axios.post('/api/field/add', submitData)
         }
         
         if (response.data.code === 200) {
@@ -448,7 +638,7 @@ const submitForm = async () => {
           ElMessage.error(response.data.msg || (isEdit.value ? '更新失败' : '添加失败'))
         }
       } catch (error) {
-        console.error(isEdit.value ? '更新地块出错:' : '添加地块出错:', error)
+        console.error('提交表单出错:', error)
         ElMessage.error(isEdit.value ? '更新失败，请稍后重试' : '添加失败，请稍后重试')
       } finally {
         formLoading.value = false
@@ -464,7 +654,7 @@ const handleSetIrrigationUnit = (row) => {
   irrigationUnitForm.fieldName = row.fieldName
   irrigationUnitForm.fieldUnitId = ''
   irrigationUnitForm.fieldSize = 0
-  irrigationUnitForm.fieldRange = ''
+  irrigationUnitForm.fieldRange = []
   irrigationUnitForm.fieldParent = row.id // 使用当前地块的id作为父级id
   
   // 设置显示信息
@@ -483,6 +673,13 @@ const submitIrrigationUnitForm = async () => {
       irrigationUnitLoading.value = true
       
       try {
+        // 确保至少有3个点
+        if (irrigationUnitForm.fieldRange.length < 3) {
+          ElMessage.warning('请至少添加3个位置点以形成灌溉单元范围')
+          irrigationUnitLoading.value = false
+          return
+        }
+        
         // 发送请求添加灌溉单元
         const response = await axios.post(`${API_BASE_URL}/field/add`, irrigationUnitForm)
         
@@ -503,7 +700,6 @@ const submitIrrigationUnitForm = async () => {
   })
 }
 
-// 页面加载时获取地块列表
 onMounted(() => {
   getFieldList();
 });
@@ -538,6 +734,20 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
+/* 位置信息相关样式 */
+.field-range-tips {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+}
+
+.field-range-tips p {
+  margin: 5px 0;
+  color: #606266;
+  font-size: 14px;
+}
+
 /* 树形表格样式 */
 :deep(.el-table__row--level-0) {
   font-weight: bold;
@@ -551,5 +761,22 @@ onMounted(() => {
 
 :deep(.el-table__expand-icon) {
   margin-right: 5px;
+}
+
+/* 位置信息表格样式 */
+.location-table {
+  margin-bottom: 10px;
+}
+
+.location-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.location-hint {
+  color: #909399;
+  font-size: 14px;
 }
 </style>
