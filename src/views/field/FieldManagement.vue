@@ -43,10 +43,10 @@
             {{ scope.row.fieldSize || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="fieldRange" label="位置信息" width="180">
+        <el-table-column prop="fieldRange" label="位置信息" width="300">
           <template #default="scope">
-            <span v-if="scope.row.fieldRange && scope.row.fieldRange.length > 0">
-              {{ scope.row.fieldRange.length }}个坐标点
+            <span v-if="scope.row.fieldRange">
+              {{ typeof scope.row.fieldRange === 'string' ? scope.row.fieldRange : JSON.stringify(scope.row.fieldRange) }}
             </span>
             <span v-else>-</span>
           </template>
@@ -499,7 +499,14 @@ const getFieldList = async () => {
     const response = await axios.get(`${API_BASE_URL}/field/query/page`, { params })
     
     if (response.data.code === 200) {
-      fieldList.value = response.data.value.records || []
+      const records = response.data.value.records || []
+      
+      // 检查第一条记录的 fieldRange 格式
+      if (records.length > 0) {
+        console.log('获取到的第一条记录的位置信息:', records[0].fieldRange, typeof records[0].fieldRange)
+      }
+      
+      fieldList.value = records
       total.value = response.data.value.total || 0
     } else {
       ElMessage.error(response.data.msg || '获取地块列表失败')
@@ -562,7 +569,23 @@ const handleEditField = (row) => {
   fieldForm.fieldId = row.fieldId
   fieldForm.fieldName = row.fieldName
   fieldForm.fieldSize = row.fieldSize
-  fieldForm.fieldRange = row.fieldRange || []
+  
+  // 处理位置信息
+  console.log('编辑地块时的原始位置信息:', row.fieldRange, typeof row.fieldRange)
+  try {
+    if (typeof row.fieldRange === 'string') {
+      fieldForm.fieldRange = JSON.parse(row.fieldRange)
+      console.log('解析后的位置信息:', fieldForm.fieldRange)
+    } else if (Array.isArray(row.fieldRange)) {
+      fieldForm.fieldRange = row.fieldRange
+    } else {
+      fieldForm.fieldRange = []
+    }
+  } catch (e) {
+    console.error('解析位置信息出错:', e, '原始数据:', row.fieldRange)
+    fieldForm.fieldRange = []
+  }
+  
   fieldForm.irrigationUnit = row.irrigationUnit || []
   
   dialogVisible.value = true
@@ -680,8 +703,14 @@ const submitIrrigationUnitForm = async () => {
           return
         }
         
+        // 构造提交数据
+        const submitData = {
+          ...irrigationUnitForm,
+          fieldRange: irrigationUnitForm.fieldRange // 直接使用位置点数组
+        }
+        
         // 发送请求添加灌溉单元
-        const response = await axios.post(`${API_BASE_URL}/field/add`, irrigationUnitForm)
+        const response = await axios.post(`${API_BASE_URL}/field/add`, submitData)
         
         if (response.data.code === 200) {
           ElMessage.success('设置灌溉单元成功')
