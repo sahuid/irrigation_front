@@ -19,8 +19,26 @@
           </el-input>
         </div>
         <div class="action-box">
+          <el-upload
+            class="excel-upload"
+            action="/api/group/import"
+            :on-success="handleImportSuccess"
+            :on-error="handleImportError"
+            :before-upload="beforeUploadFile"
+            :show-file-list="false"
+            :headers="uploadHeaders"
+            name="file"
+            accept=".xlsx,.xls"
+          >
+            <el-button type="success">
+              <el-icon><Upload /></el-icon>导入 Excel
+            </el-button>
+          </el-upload>
           <el-button type="primary" @click="handleAddGroup">
             <el-icon><Plus /></el-icon>添加分组
+          </el-button>
+          <el-button @click="downloadTemplate">
+            <el-icon><Download /></el-icon>下载模板
           </el-button>
         </div>
       </div>
@@ -255,7 +273,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
-import { Search, Plus } from '@element-plus/icons-vue'
+import { Search, Plus, Upload, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 
@@ -267,6 +285,13 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const searchQuery = ref('')
+
+// 上传相关
+const uploadHeaders = computed(() => {
+  return {
+    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+  }
+})
 
 // 对话框相关
 const dialogVisible = ref(false)
@@ -654,6 +679,74 @@ const resetGroupLocationInfo = () => {
   groupForm.groupRange = []
 }
 
+// 处理导入成功
+const handleImportSuccess = (response) => {
+  if (response.code === 200) {
+    ElMessage.success('导入成功')
+    loadGroupList()
+  } else {
+    ElMessage.error(`导入失败: ${response.msg || '未知错误'}`)
+  }
+}
+
+// 处理导入错误
+const handleImportError = (error) => {
+  console.error('Excel导入错误:', error)
+  ElMessage.error('导入失败，请检查文件格式或网络连接')
+}
+
+// 处理下载模板
+const downloadTemplate = () => {
+  try {
+    // 下载分组Excel模板
+    const downloadUrl = `/api/group/template/download`
+    
+    // 使用 axios 的 get 方法下载文件
+    axios({
+      method: 'get',
+      url: downloadUrl,
+      responseType: 'blob'
+    }).then(response => {
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', '分组导入模板.xlsx')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      ElMessage.success('模板下载成功')
+    }).catch(error => {
+      console.error('下载模板出错:', error)
+      ElMessage.error('下载模板失败，请稍后重试')
+    })
+  } catch (error) {
+    console.error('下载模板出错:', error)
+    ElMessage.error('下载模板失败，请稍后重试')
+  }
+}
+
+// 上传前验证文件
+const beforeUploadFile = (file) => {
+  const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                  file.type === 'application/vnd.ms-excel'
+  const isLt5M = file.size / 1024 / 1024 < 5
+
+  if (!isExcel) {
+    ElMessage.error('只能上传Excel文件!')
+    return false
+  }
+  
+  if (!isLt5M) {
+    ElMessage.error('文件大小不能超过5MB!')
+    return false
+  }
+  
+  ElMessage.info('文件上传中，请稍候...')
+  return true
+}
+
 // 页面加载时获取分组列表
 onMounted(() => {
   loadGroupList()
@@ -722,5 +815,16 @@ onUnmounted(() => {
 .location-hint {
   color: #909399;
   font-size: 12px;
+}
+
+.action-box {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
+.excel-upload {
+  margin-right: 5px;
 }
 </style> 
