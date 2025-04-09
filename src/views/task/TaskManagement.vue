@@ -79,10 +79,36 @@
           <el-input v-model="taskForm.taskId" placeholder="请输入任务编号"></el-input>
         </el-form-item>
         <el-form-item label="地块编号" prop="fieldId">
-          <el-input v-model="taskForm.fieldId" placeholder="请输入地块编号"></el-input>
+          <el-select 
+            v-model="taskForm.fieldId" 
+            placeholder="请选择地块"
+            style="width: 100%"
+            filterable
+            @change="handleFieldChange"
+          >
+            <el-option
+              v-for="field in fieldOptions"
+              :key="field.id"
+              :label="field.fieldId"
+              :value="field.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="灌溉单元编号" prop="fieldUnitId">
-          <el-input v-model="taskForm.fieldUnitId" placeholder="请输入灌溉单元编号"></el-input>
+          <el-select 
+            v-model="taskForm.fieldUnitId" 
+            placeholder="请选择灌溉单元"
+            style="width: 100%"
+            filterable
+            :disabled="!taskForm.fieldId"
+          >
+            <el-option
+              v-for="unit in fieldUnitOptions"
+              :key="unit.id"
+              :label="unit.fieldUnitId"
+              :value="unit.fieldUnitId"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="开始时间" prop="startTimeDate">
           <el-config-provider :locale="locale">
@@ -143,7 +169,9 @@ const total = ref(0)
 const searchKeyword = ref('')
 
 // 地块选项
-// const fieldOptions = ref([])
+const fieldOptions = ref([])
+// 灌溉单元选项
+const fieldUnitOptions = ref([])
 
 // 表单相关
 const taskFormRef = ref(null)
@@ -204,6 +232,7 @@ const dateShortcuts = [
 // 初始化数据
 onMounted(() => {
   getTaskList()
+  loadFieldOptions()
 })
 
 // 格式化开始时间 (原始格式转换为显示格式)
@@ -299,6 +328,55 @@ const handleCurrentChange = (val) => {
   getTaskList()
 }
 
+// 获取地块列表
+const loadFieldOptions = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/field/list/field`)
+    if (response.data.code === 200) {
+      fieldOptions.value = response.data.value || []
+    } else {
+      ElMessage.error(response.data.msg || '获取地块列表失败')
+    }
+    return Promise.resolve()
+  } catch (error) {
+    console.error('获取地块列表出错:', error)
+    ElMessage.error('获取地块列表失败，请稍后重试')
+    return Promise.reject(error)
+  }
+}
+
+// 根据地块ID获取灌溉单元列表
+const loadFieldUnitOptions = async (fieldId) => {
+  if (!fieldId) {
+    fieldUnitOptions.value = []
+    return
+  }
+  
+  try {
+    // 查询该地块下的灌溉单元
+    const response = await axios.get(`${API_BASE_URL}/field/getUnitByField`, {
+      params: { id: fieldId }
+    })
+    
+    if (response.data.code === 200) {
+      fieldUnitOptions.value = response.data.value || []
+    } else {
+      ElMessage.error(response.data.msg || '获取灌溉单元列表失败')
+    }
+  } catch (error) {
+    console.error('获取灌溉单元列表出错:', error)
+    ElMessage.error('获取灌溉单元列表失败，请稍后重试')
+  }
+}
+
+// 处理地块选择变化
+const handleFieldChange = (id) => {
+  // 清空已选择的灌溉单元
+  taskForm.fieldUnitId = ''
+  // 加载该地块下的灌溉单元
+  loadFieldUnitOptions(id)
+}
+
 // 新增任务
 const handleAddTask = () => {
   dialogTitle.value = '新增任务'
@@ -312,6 +390,15 @@ const handleAddTask = () => {
   taskForm.fertilizerN = 0
   taskForm.fertilizerP = 0
   taskForm.fertilizerK = 0
+  
+  // 确保已加载地块列表
+  if (fieldOptions.value.length === 0) {
+    loadFieldOptions()
+  }
+  
+  // 清空灌溉单元列表
+  fieldUnitOptions.value = []
+  
   dialogVisible.value = true
 }
 
@@ -320,7 +407,18 @@ const handleEdit = (row) => {
   dialogTitle.value = '编辑任务'
   taskForm.id = row.id
   taskForm.taskId = row.taskId
-  taskForm.fieldId = row.fieldId
+  
+  // 确保已加载地块列表
+  if (fieldOptions.value.length === 0) {
+    loadFieldOptions().then(() => {
+      // 根据fieldId查找对应的地块ID
+      setFieldIdByFieldCode(row.fieldId);
+    });
+  } else {
+    // 立即设置地块ID
+    setFieldIdByFieldCode(row.fieldId);
+  }
+  
   taskForm.fieldUnitId = row.fieldUnitId
   
   // 处理日期格式
@@ -347,6 +445,19 @@ const handleEdit = (row) => {
   taskForm.fertilizerP = row.fertilizerP
   taskForm.fertilizerK = row.fertilizerK
   dialogVisible.value = true
+}
+
+// 根据地块的fieldId找到对应的id
+const setFieldIdByFieldCode = (fieldCode) => {
+  const field = fieldOptions.value.find(f => f.fieldId === fieldCode);
+  if (field) {
+    taskForm.fieldId = field.id;
+    // 加载该地块下的灌溉单元
+    loadFieldUnitOptions(field.id);
+  } else {
+    taskForm.fieldId = '';
+    fieldUnitOptions.value = [];
+  }
 }
 
 // 删除任务
