@@ -153,20 +153,20 @@
             </div>
             <el-table :data="fieldForm.fieldRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
-              <el-table-column label="经度" prop="longitude">
+              <el-table-column label="纬度" prop="latitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.longitude" 
+                    v-model="scope.row.latitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="纬度" prop="latitude">
+              <el-table-column label="经度" prop="longitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.latitude" 
+                    v-model="scope.row.longitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"
@@ -234,20 +234,20 @@
             </div>
             <el-table :data="fieldForm.fieldRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
-              <el-table-column label="经度" prop="longitude">
+              <el-table-column label="纬度" prop="latitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.longitude" 
+                    v-model="scope.row.latitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="纬度" prop="latitude">
+              <el-table-column label="经度" prop="longitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.latitude" 
+                    v-model="scope.row.longitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"
@@ -317,20 +317,20 @@
             </div>
             <el-table :data="irrigationUnitForm.fieldRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
-              <el-table-column label="经度" prop="longitude">
+              <el-table-column label="纬度" prop="latitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.longitude" 
+                    v-model="scope.row.latitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="纬度" prop="latitude">
+              <el-table-column label="经度" prop="longitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.latitude" 
+                    v-model="scope.row.longitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"

@@ -57,6 +57,11 @@
             {{ scope.row.fieldList ? scope.row.fieldList.length : 0 }}
           </template>
         </el-table-column>
+        <el-table-column label="组面积" width="150">
+          <template #default="scope">
+            {{ (scope.row.groupSize !== null && scope.row.groupSize !== undefined) ? scope.row.groupSize + ' m²' : '0 m²' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="groupRange" label="位置信息" width="300">
           <template #default="scope">
             <span v-if="scope.row.groupRange">
@@ -150,20 +155,20 @@
             </div>
             <el-table :data="groupForm.groupRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
-              <el-table-column label="经度" prop="longitude">
+              <el-table-column label="纬度" prop="latitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.longitude" 
+                    v-model="scope.row.latitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="纬度" prop="latitude">
+              <el-table-column label="经度" prop="longitude">
                 <template #default="scope">
                   <el-input-number 
-                    v-model="scope.row.latitude" 
+                    v-model="scope.row.longitude" 
                     :controls="false" 
                     :precision="6"
                     style="width: 100%"

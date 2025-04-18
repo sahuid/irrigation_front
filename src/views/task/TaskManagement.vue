@@ -117,8 +117,9 @@
               type="datetime"
               placeholder="选择开始时间"
               style="width: 100%"
-              format="YYYY年MM月DD日 HH:mm"
+              format="YYYY年MM月DD日 HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
+              :clearable="false"
               :shortcuts="dateShortcuts"
             />
           </el-config-provider>
@@ -147,7 +148,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
@@ -205,14 +206,13 @@ const rules = {
 // 日期选择器快捷选项
 const dateShortcuts = [
   {
-    text: '今天',
+    text: '此刻',
     value: () => {
-      const date = new Date()
-      return date
+      return new Date()
     }
   },
   {
-    text: '明天',
+    text: '明天此刻',
     value: () => {
       const date = new Date()
       date.setTime(date.getTime() + 3600 * 1000 * 24)
@@ -228,6 +228,22 @@ const dateShortcuts = [
     }
   }
 ]
+
+// 对话框状态监控
+const dialogVisibleChanged = (newVal) => {
+  if (newVal && !isEdit.value) {
+    // 当对话框打开且是新增模式时，设置当前时间
+    const now = new Date()
+    taskForm.startTimeDate = now.toISOString().slice(0, 19).replace('T', ' ')
+    console.log('对话框打开，已设置当前时间:', taskForm.startTimeDate)
+  }
+}
+
+// 监控对话框状态
+const isEdit = ref(false)
+
+// 监听对话框显示状态
+watch(dialogVisible, dialogVisibleChanged)
 
 // 初始化数据
 onMounted(() => {
@@ -380,12 +396,18 @@ const handleFieldChange = (id) => {
 // 新增任务
 const handleAddTask = () => {
   dialogTitle.value = '新增任务'
+  isEdit.value = false
   taskForm.id = ''
   taskForm.taskId = ''
   taskForm.fieldId = ''
   taskForm.fieldUnitId = ''
-  taskForm.startTimeDate = ''
-  taskForm.startTime = ''
+  
+  // 设置当前时间作为默认开始时间
+  const now = new Date()
+  const timeStr = now.toISOString().slice(0, 19).replace('T', ' ')
+  taskForm.startTimeDate = timeStr
+  taskForm.startTime = timeStr
+  
   taskForm.water = 0
   taskForm.fertilizerN = 0
   taskForm.fertilizerP = 0
@@ -405,6 +427,7 @@ const handleAddTask = () => {
 // 编辑任务
 const handleEdit = (row) => {
   dialogTitle.value = '编辑任务'
+  isEdit.value = true
   taskForm.id = row.id
   taskForm.taskId = row.taskId
   
@@ -423,17 +446,34 @@ const handleEdit = (row) => {
   
   // 处理日期格式
   if (row.startTime) {
-    if (row.startTime.includes('/')) {
-      // 如果是 "2025/03/12/20/00" 格式，转换为 "2025-03-12 20:00:00" 格式
-      const parts = row.startTime.split('/');
-      if (parts.length === 5) {
-        taskForm.startTimeDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')} ${parts[3].padStart(2, '0')}:${parts[4].padStart(2, '0')}:00`;
+    try {
+      if (row.startTime.includes('/')) {
+        // 如果是 "2025/03/12/20/00" 格式，转换为 "2025-03-12 20:00:00" 格式
+        const parts = row.startTime.split('/');
+        if (parts.length === 5) {
+          taskForm.startTimeDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')} ${parts[3].padStart(2, '0')}:${parts[4].padStart(2, '0')}:00`;
+          console.log('已处理旧格式的日期:', taskForm.startTimeDate);
+        } else {
+          taskForm.startTimeDate = row.startTime;
+        }
       } else {
+        // 其他格式直接使用
         taskForm.startTimeDate = row.startTime;
       }
-    } else {
-      // 其他格式直接使用
-      taskForm.startTimeDate = row.startTime;
+      
+      // 验证日期是否有效
+      const dateObj = new Date(taskForm.startTimeDate);
+      if (isNaN(dateObj.getTime()) || dateObj.getFullYear() > 2100) {
+        // 无效日期，使用当前时间
+        const now = new Date();
+        taskForm.startTimeDate = now.toISOString().slice(0, 19).replace('T', ' ');
+        console.log('检测到无效日期，已重置为当前时间:', taskForm.startTimeDate);
+      }
+    } catch (e) {
+      console.error('处理日期时出错:', e);
+      // 出错时使用当前时间
+      const now = new Date();
+      taskForm.startTimeDate = now.toISOString().slice(0, 19).replace('T', ' ');
     }
   } else {
     taskForm.startTimeDate = '';
@@ -491,8 +531,25 @@ const submitForm = async () => {
   taskFormRef.value.validate(async (valid) => {
     if (valid) {
       try {
-        // 使用日期选择器的值更新 startTime
-        taskForm.startTime = taskForm.startTimeDate
+        // 强制使用当前时间，使用24小时制格式
+        const now = new Date();
+        
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        
+        // 使用24小时制 (HH) 而不是12小时制 (hh)
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        
+        // 使用24小时制的格式: yyyy-MM-dd HH:mm:ss
+        const backendFormat = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        
+        console.log('使用24小时制的日期格式:', backendFormat);
+        
+        // 更新表单时间
+        taskForm.startTimeDate = backendFormat;
         
         let response
         const submitData = {
@@ -500,12 +557,14 @@ const submitForm = async () => {
           taskId: taskForm.taskId,
           fieldId: taskForm.fieldId,
           fieldUnitId: taskForm.fieldUnitId,
-          startTime: taskForm.startTime, // 现在是 "YYYY-MM-DD HH:mm:ss" 格式
+          startTime: backendFormat,
           water: taskForm.water,
           fertilizerN: taskForm.fertilizerN,
           fertilizerP: taskForm.fertilizerP,
           fertilizerK: taskForm.fertilizerK
         }
+        
+        console.log('最终提交的日期时间:', submitData.startTime);
         
         if (taskForm.id) {
           // 编辑 - 使用 /task/update 接口

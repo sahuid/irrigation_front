@@ -96,7 +96,7 @@
         label-position="right"
       >
         <el-form-item label="设备类型" prop="deviceType">
-          <el-select v-model="deviceForm.deviceType" placeholder="请选择设备类型" style="width: 100%">
+          <el-select v-model="deviceForm.deviceType" placeholder="请选择设备类型" style="width: 100%" @change="handleDeviceTypeChange">
             <el-option
               v-for="item in deviceTypeOptions"
               :key="item.value"
@@ -108,28 +108,70 @@
         <el-form-item label="设备编号" prop="deviceId">
           <el-input v-model="deviceForm.deviceId" :disabled="isEdit" />
         </el-form-item>
-        <el-form-item label="选择类型" prop="locationType">
-          <el-radio-group v-model="deviceForm.locationType" @change="handleLocationTypeChange">
-            <el-radio :label="1">地块</el-radio>
-            <el-radio :label="2">基本灌溉单元</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item :label="deviceForm.locationType === 1 ? '地块' : '基本灌溉单元'" prop="deviceManagerNumber">
-          <el-select 
-            v-model="deviceForm.deviceManagerNumber" 
-            :placeholder="deviceForm.locationType === 1 ? '请选择地块' : '请选择基本灌溉单元'" 
-            filterable
-            style="width: 100%"
-            :loading="locationOptionsLoading"
-          >
-            <el-option
-              v-for="item in locationOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </el-form-item>
+        
+        <!-- 阀门类型设备的地块和基本灌溉单元选择 -->
+        <template v-if="deviceForm.deviceType === 0">
+          <el-form-item label="选择地块" prop="selectedField">
+            <el-select 
+              v-model="deviceForm.selectedField" 
+              placeholder="请选择地块" 
+              filterable
+              style="width: 100%"
+              :loading="fieldOptionsLoading"
+              @change="handleFieldChange"
+            >
+              <el-option
+                v-for="item in fieldOptions"
+                :key="item.id"
+                :label="item.fieldId"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="选择灌溉单元" prop="deviceManagerNumber">
+            <el-select 
+              v-model="deviceForm.deviceManagerNumber" 
+              placeholder="请选择灌溉单元" 
+              filterable
+              style="width: 100%"
+              :loading="unitOptionsLoading"
+              :disabled="!deviceForm.selectedField"
+            >
+              <el-option
+                v-for="item in unitOptions"
+                :key="item.id"
+                :label="item.fieldUnitId"
+                :value="item.fieldUnitId"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
+        
+        <!-- 其他类型设备的选择 -->
+        <template v-else>
+          <el-form-item label="选择类型" prop="locationType">
+            <el-radio-group v-model="deviceForm.locationType" @change="handleLocationTypeChange">
+              <el-radio :label="1">地块</el-radio>
+              <el-radio :label="2">基本灌溉单元</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item :label="deviceForm.locationType === 1 ? '地块' : '基本灌溉单元'" prop="deviceManagerNumber">
+            <el-select 
+              v-model="deviceForm.deviceManagerNumber" 
+              :placeholder="deviceForm.locationType === 1 ? '请选择地块' : '请选择基本灌溉单元'" 
+              filterable
+              style="width: 100%"
+              :loading="locationOptionsLoading"
+            >
+              <el-option
+                v-for="item in locationOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -203,19 +245,97 @@ const deviceForm = reactive({
   deviceId: '',
   deviceType: '',
   deviceManagerNumber: '',
-  locationType: 1 // 默认选择地块
+  locationType: 1, // 默认选择地块
+  selectedField: '',
+  deviceManagerNumber: ''
 })
 
 // 设备类型选项
 const deviceTypeOptions = [
   { value: 0, label: '阀门' },
-  { value: 1, label: '水闸' },
+  { value: 1, label: '水泵' },
   { value: 2, label: '施肥机' }
 ]
 
 // 地块/基本灌溉单元选项
 const locationOptions = ref([])
 const locationOptionsLoading = ref(false)
+const fieldOptions = ref([])
+const fieldOptionsLoading = ref(false)
+const unitOptions = ref([])
+const unitOptionsLoading = ref(false)
+
+// 处理设备类型变化
+const handleDeviceTypeChange = () => {
+  // 清空已选项
+  deviceForm.selectedField = '';
+  deviceForm.deviceManagerNumber = '';
+  
+  if (deviceForm.deviceType === 0) {
+    // 阀门类型，加载地块列表
+    loadFieldOptions();
+  } else {
+    // 其他类型，加载对应类型的选项
+    getLocationOptions();
+  }
+}
+
+// 加载地块选项
+const loadFieldOptions = async () => {
+  fieldOptionsLoading.value = true;
+  fieldOptions.value = [];
+  unitOptions.value = [];
+  
+  try {
+    const response = await axios.get('/api/field/list/field');
+    
+    if (response.data.code === 200) {
+      fieldOptions.value = (response.data.value || []).map(item => ({
+        id: item.id,
+        fieldId: item.fieldId
+      }));
+    } else {
+      ElMessage.error(response.data.msg || '获取地块列表失败');
+    }
+  } catch (error) {
+    console.error('获取地块列表出错:', error);
+    ElMessage.error('获取地块列表失败，请稍后重试');
+  } finally {
+    fieldOptionsLoading.value = false;
+  }
+}
+
+// 处理地块选择变化
+const handleFieldChange = async (fieldId) => {
+  // 清空灌溉单元选择
+  deviceForm.deviceManagerNumber = '';
+  unitOptions.value = [];
+  
+  if (!fieldId) return;
+  
+  unitOptionsLoading.value = true;
+  
+  try {
+    // 查询该地块下的灌溉单元
+    const response = await axios.get(`/api/field/getUnitByField`, {
+      params: { id: fieldId }
+    });
+    
+    if (response.data.code === 200) {
+      unitOptions.value = (response.data.value || []).map(item => ({
+        id: item.id,
+        fieldUnitId: item.fieldUnitId
+      }));
+    } else {
+      ElMessage.error(response.data.msg || '获取灌溉单元列表失败');
+    }
+  } catch (error) {
+    console.error('获取灌溉单元列表出错:', error);
+    ElMessage.error('获取灌溉单元列表失败，请稍后重试');
+  } finally {
+    unitOptionsLoading.value = false;
+  }
+}
 
 // 处理位置类型变化
 const handleLocationTypeChange = () => {
@@ -223,7 +343,7 @@ const handleLocationTypeChange = () => {
   getLocationOptions() // 重新获取选项
 }
 
-// 获取地块/基本灌溉单元选项
+// 获取地块/基本灌溉单元选项（用于非阀门设备）
 const getLocationOptions = async () => {
   locationOptionsLoading.value = true
   locationOptions.value = []
@@ -253,11 +373,11 @@ const getLocationOptions = async () => {
           }))
       }
     } else {
-      ElMessage.error(response.data.msg || '获取选项列表失败')
+      ElMessage.error(response.data.msg || '获取选项失败')
     }
   } catch (error) {
-    console.error('获取选项列表出错:', error)
-    ElMessage.error('获取选项列表失败，请稍后重试')
+    console.error('获取选项出错:', error)
+    ElMessage.error('获取选项失败，请稍后重试')
   } finally {
     locationOptionsLoading.value = false
   }
@@ -277,7 +397,19 @@ const deviceRules = {
   ],
   deviceManagerNumber: [
     { required: true, message: '请选择地块/基本灌溉单元', trigger: 'change' }
-  ]
+  ],
+  selectedField: [{ 
+    required: true, 
+    message: '请选择地块', 
+    trigger: 'change',
+    validator: (rule, value, callback) => {
+      if (deviceForm.deviceType === 0 && !value) {
+        callback(new Error('请选择地块'));
+      } else {
+        callback();
+      }
+    }
+  }]
 }
 
 // 权限控制
@@ -367,14 +499,17 @@ const handleAddDevice = () => {
   deviceForm.deviceType = ''
   deviceForm.deviceManagerNumber = ''
   deviceForm.locationType = 1 // 默认选择地块
+  deviceForm.selectedField = '' // 清空已选择的地块
   dialogVisible.value = true
   
-  // 获取地块选项
-  getLocationOptions()
+  // 清空选项
+  fieldOptions.value = []
+  unitOptions.value = []
+  locationOptions.value = []
 }
 
 // 处理编辑设备
-const handleEditDevice = (row) => {
+const handleEditDevice = async (row) => {
   isEdit.value = true
   deviceForm.id = row.id
   deviceForm.deviceId = row.deviceId
@@ -382,13 +517,30 @@ const handleEditDevice = (row) => {
   deviceForm.deviceManagerNumber = row.deviceManagerNumber
   
   // 根据deviceManagerNumber判断是地块还是基本灌溉单元
-  // 这里需要根据实际情况调整判断逻辑
   deviceForm.locationType = row.isField ? 1 : 2
   
   dialogVisible.value = true
   
-  // 获取选项
-  getLocationOptions()
+  if (row.deviceType === 0) {
+    // 阀门类型，需要先加载所有地块
+    await loadFieldOptions();
+    
+    // 查找对应的地块和灌溉单元
+    const response = await axios.get(`/api/field/getFieldByUnit`, {
+      params: { fieldUnitId: row.deviceManagerNumber }
+    });
+    
+    if (response.data.code === 200 && response.data.value) {
+      const fieldInfo = response.data.value;
+      deviceForm.selectedField = fieldInfo.id;
+      
+      // 加载该地块下的所有灌溉单元
+      await handleFieldChange(fieldInfo.id);
+    }
+  } else {
+    // 其他类型设备，使用原有逻辑
+    getLocationOptions();
+  }
 }
 
 // 处理删除设备
@@ -459,8 +611,12 @@ const submitDeviceForm = async () => {
           id: deviceForm.id,
           deviceId: deviceForm.deviceId,
           deviceType: deviceForm.deviceType,
-          deviceManagerNumber: deviceForm.deviceManagerNumber,
-          isField: deviceForm.locationType === 1 // 添加标识是地块还是基本灌溉单元
+          deviceManagerNumber: deviceForm.deviceManagerNumber
+        }
+        
+        // 非阀门类型设备需要添加isField标识
+        if (deviceForm.deviceType !== 0) {
+          submitData.isField = deviceForm.locationType === 1;
         }
         
         let response

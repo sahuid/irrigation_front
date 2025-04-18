@@ -38,9 +38,9 @@
             {{ scope.row.water_and_fertilizer }}:1
           </template>
         </el-table-column>
-        <el-table-column prop="head_water_consumption" label="头纯水耗水量(h/s)" width="150" />
+        <el-table-column prop="head_water_consumption" label="头纯水耗水量" width="150" />
         <el-table-column prop="current_speed" label="流速(L)" width="150" />
-        <el-table-column prop="tail_water_consumption" label="尾纯水耗水量(h/s)" width="150" />
+        <el-table-column prop="tail_water_consumption" label="尾纯水耗水量" width="150" />
         <el-table-column prop="fieldId" label="地块编号" width="150" />
         <el-table-column label="操作" fixed="right" width="200">
           <template #default="scope">
