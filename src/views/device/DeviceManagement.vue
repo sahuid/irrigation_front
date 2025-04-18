@@ -66,13 +66,6 @@
             </el-button>
             <el-button 
               size="small" 
-              type="success" 
-              @click="handleViewData(scope.row)"
-            >
-              查看数据
-            </el-button>
-            <el-button 
-              size="small" 
               type="danger" 
               @click="handleDeleteDevice(scope.row)"
               :disabled="!hasDeletePermission"
@@ -191,38 +184,11 @@
         </span>
       </template>
     </el-dialog>
-
-    <!-- 设备数据对话框 -->
-    <el-dialog
-      v-model="dataDialogVisible"
-      title="设备数据"
-      width="800px"
-      destroy-on-close
-    >
-      <div v-loading="dataLoading">
-        <div v-if="deviceData.length > 0">
-          <el-table
-            :data="deviceData"
-            border
-            style="width: 100%"
-            height="400px"
-          >
-            <el-table-column prop="timestamp" label="时间" width="180" />
-            <el-table-column prop="value" label="数值" width="120" />
-            <el-table-column prop="unit" label="单位" width="100" />
-            <el-table-column prop="type" label="数据类型" />
-          </el-table>
-        </div>
-        <div v-else class="empty-data">
-          暂无设备数据
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
@@ -241,12 +207,6 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const deviceFormRef = ref(null)
 const submitLoading = ref(false)
-
-// 设备数据对话框相关
-const dataDialogVisible = ref(false)
-const dataLoading = ref(false)
-const deviceData = ref([])
-const currentDevice = ref(null)
 
 // 设备表单
 const deviceForm = reactive({
@@ -584,29 +544,6 @@ const handleDeleteDevice = (row) => {
   }).catch(() => {
     // 取消删除
   })
-}
-
-// 查看设备数据
-const handleViewData = async (row) => {
-  currentDevice.value = row
-  dataDialogVisible.value = true
-  dataLoading.value = true
-  deviceData.value = []
-  
-  try {
-    const response = await axios.get(`/api/device/data/${row.id}`)
-    
-    if (response.data.code === 200) {
-      deviceData.value = response.data.value || []
-    } else {
-      ElMessage.error(response.data.msg || '获取设备数据失败')
-    }
-  } catch (error) {
-    console.error('获取设备数据出错:', error)
-    ElMessage.error('获取设备数据失败，请稍后重试')
-  } finally {
-    dataLoading.value = false
-  }
 }
 
 // 提交设备表单

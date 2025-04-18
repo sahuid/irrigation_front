@@ -90,7 +90,7 @@
               v-for="field in fieldOptions"
               :key="field.id"
               :label="field.fieldId"
-              :value="field.id"
+              :value="field.fieldId"
             />
           </el-select>
         </el-form-item>
@@ -386,11 +386,19 @@ const loadFieldUnitOptions = async (fieldId) => {
 }
 
 // 处理地块选择变化
-const handleFieldChange = (id) => {
+const handleFieldChange = (fieldId) => {
   // 清空已选择的灌溉单元
   taskForm.fieldUnitId = ''
-  // 加载该地块下的灌溉单元
-  loadFieldUnitOptions(id)
+  
+  // 查找地块对象以获取数据库ID(用于加载灌溉单元)
+  const selectedField = fieldOptions.value.find(field => field.fieldId === fieldId);
+  
+  if (selectedField) {
+    // 使用地块数据库ID查询灌溉单元
+    loadFieldUnitOptions(selectedField.id);
+  } else {
+    fieldUnitOptions.value = [];
+  }
 }
 
 // 新增任务
@@ -491,7 +499,7 @@ const handleEdit = (row) => {
 const setFieldIdByFieldCode = (fieldCode) => {
   const field = fieldOptions.value.find(f => f.fieldId === fieldCode);
   if (field) {
-    taskForm.fieldId = field.id;
+    taskForm.fieldId = field.fieldId;
     // 加载该地块下的灌溉单元
     loadFieldUnitOptions(field.id);
   } else {
@@ -508,7 +516,7 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      // 使用 /task/delete 接口，传递 taskId 参数
+      // 使用 /task/delete 接口，传递 taskId 参数，使用数据库ID
       const response = await axios.delete(`${API_BASE_URL}/task/delete`, {
         params: { taskId: row.id }
       })
@@ -555,7 +563,7 @@ const submitForm = async () => {
         const submitData = {
           id: taskForm.id,
           taskId: taskForm.taskId,
-          fieldId: taskForm.fieldId,
+          fieldId: taskForm.fieldId, // 直接使用地块编号字符串
           fieldUnitId: taskForm.fieldUnitId,
           startTime: backendFormat,
           water: taskForm.water,
