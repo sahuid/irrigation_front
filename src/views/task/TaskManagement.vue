@@ -25,7 +25,19 @@
       >
         <el-table-column prop="taskId" label="任务编号" width="120" />
         <el-table-column prop="fieldId" label="地块编号" width="120" />
-        <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="150" />
+        <el-table-column label="灌溉单元编号" width="150">
+          <template #default="scope">
+            <el-tooltip 
+              v-if="Array.isArray(scope.row.fieldUnitIds) && scope.row.fieldUnitIds.length > 1"
+              effect="light" 
+              placement="top"
+              :content="scope.row.fieldUnitIds.join(', ')"
+            >
+              <span>{{ scope.row.fieldUnitIds.length }}个单元</span>
+            </el-tooltip>
+            <span v-else>{{ Array.isArray(scope.row.fieldUnitIds) ? scope.row.fieldUnitIds.join(', ') : scope.row.fieldUnitId }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="startTime" label="开始时间" width="180">
           <template #default="scope">
             {{ formatStartTimeForDisplay(scope.row.startTime) }}
@@ -51,10 +63,11 @@
             {{ scope.row.fertilizerK }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="scope">
             <el-button type="primary" size="small" @click="handleEdit(scope.row)" icon="Edit">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(scope.row)" icon="Delete">删除</el-button>
+            <el-button type="success" size="small" @click="handleToGroup(scope.row)" icon="SetUp">一键分组</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -94,21 +107,49 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="灌溉单元编号" prop="fieldUnitId">
-          <el-select 
-            v-model="taskForm.fieldUnitId" 
-            placeholder="请选择灌溉单元"
-            style="width: 100%"
-            filterable
-            :disabled="!taskForm.fieldId"
-          >
-            <el-option
-              v-for="unit in fieldUnitOptions"
-              :key="unit.id"
-              :label="unit.fieldUnitId"
-              :value="unit.fieldUnitId"
-            />
-          </el-select>
+        <el-form-item label="灌溉单元编号" prop="fieldUnitIds">
+          <div>
+            <el-table
+              :data="fieldUnitOptions"
+              border
+              size="small"
+              style="width: 100%"
+              max-height="250px"
+              v-loading="!taskForm.fieldId"
+              empty-text="请先选择地块"
+            >
+              <el-table-column type="selection" width="55" :selectable="isUnitSelectable" />
+              <el-table-column prop="fieldUnitId" label="灌溉单元编号" />
+              <el-table-column width="80">
+                <template #default="scope">
+                  <el-button
+                    type="primary"
+                    size="small"
+                    plain
+                    :disabled="taskForm.fieldUnitIds.includes(scope.row.fieldUnitId)"
+                    @click="toggleUnitSelection(scope.row)"
+                  >
+                    {{ taskForm.fieldUnitIds.includes(scope.row.fieldUnitId) ? '已选' : '选择' }}
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            
+            <div style="margin-top: 10px;" v-if="taskForm.fieldUnitIds.length > 0">
+              <div style="margin-bottom: 8px; font-size: 14px; color: #606266;">已选灌溉单元：</div>
+              <div class="selected-units">
+                <el-tag
+                  v-for="(unitId, index) in taskForm.fieldUnitIds"
+                  :key="index"
+                  closable
+                  @close="taskForm.fieldUnitIds.splice(index, 1)"
+                  style="margin-right: 6px; margin-bottom: 6px;"
+                >
+                  {{ unitId }}
+                </el-tag>
+              </div>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="开始时间" prop="startTimeDate">
           <el-config-provider :locale="locale">
@@ -144,6 +185,36 @@
         </span>
       </template>
     </el-dialog>
+    
+    <!-- 一键分组对话框 -->
+    <el-dialog
+      v-model="groupDialogVisible"
+      title="将任务灌溉单元添加到分组"
+      width="500px"
+      destroy-on-close
+    >
+      <el-form :model="groupForm" ref="groupFormRef" label-width="120px">
+        <el-form-item label="选择分组" prop="groupId">
+          <el-select v-model="groupForm.groupId" placeholder="请选择分组" style="width: 100%;">
+            <el-option
+              v-for="group in groupOptions"
+              :key="group.id"
+              :label="group.groupName"
+              :value="group.id"
+            />
+          </el-select>
+        </el-form-item>
+        <div style="margin-top: 20px; color: #666; font-size: 14px;">
+          <p>将会把任务 <strong>{{ currentTask?.taskId }}</strong> 中的灌溉单元添加到所选分组。</p>
+        </div>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="groupDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitGroupForm" :loading="groupSubmitLoading">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -174,6 +245,17 @@ const fieldOptions = ref([])
 // 灌溉单元选项
 const fieldUnitOptions = ref([])
 
+// 分组相关
+const groupDialogVisible = ref(false)
+const groupOptions = ref([])
+const groupSubmitLoading = ref(false)
+const groupFormRef = ref(null)
+const currentTask = ref(null)
+const groupForm = reactive({
+  groupId: '',
+  taskId: ''
+})
+
 // 表单相关
 const taskFormRef = ref(null)
 const dialogVisible = ref(false)
@@ -182,7 +264,7 @@ const taskForm = reactive({
   id: '',
   taskId: '',
   fieldId: '',
-  fieldUnitId: '',
+  fieldUnitIds: [],
   startTimeDate: '', // 用于日期选择器
   startTime: '',
   water: 0,
@@ -195,7 +277,7 @@ const taskForm = reactive({
 const rules = {
   taskId: [{ required: true, message: '请输入任务编号', trigger: 'blur' }],
   fieldId: [{ required: true, message: '请选择地块编号', trigger: 'change' }],
-  fieldUnitId: [{ required: true, message: '请输入灌溉单元编号', trigger: 'blur' }],
+  fieldUnitIds: [{ required: true, message: '请选择灌溉单元', trigger: 'change' }],
   startTimeDate: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
   water: [{ required: true, message: '请输入水量', trigger: 'blur' }],
   fertilizerN: [{ required: true, message: '请输入氮肥量', trigger: 'blur' }],
@@ -285,6 +367,25 @@ const formatStartTimeForDisplay = (timeStr) => {
   }
 };
 
+// 处理任务数据，确保字段格式一致
+const processTaskData = (tasks) => {
+  return tasks.map(task => {
+    // 处理灌溉单元字段，确保是数组格式
+    if (!task.fieldUnitIds) {
+      if (task.fieldUnitId) {
+        task.fieldUnitIds = [task.fieldUnitId];
+      } else {
+        task.fieldUnitIds = [];
+      }
+    } else if (typeof task.fieldUnitIds === 'string') {
+      // 如果后端返回的是字符串格式(如逗号分隔的字符串)，转为数组
+      task.fieldUnitIds = task.fieldUnitIds.split(',').map(id => id.trim());
+    }
+    
+    return task;
+  });
+};
+
 // 获取任务列表
 const getTaskList = async () => {
   loading.value = true;
@@ -302,7 +403,7 @@ const getTaskList = async () => {
       if (response.data.value.records && response.data.value.records.length > 0) {
         console.log('第一条记录的开始时间:', response.data.value.records[0].startTime);
       }
-      taskList.value = response.data.value.records || [];
+      taskList.value = processTaskData(response.data.value.records || []);
       total.value = response.data.value.total || 0;
     } else {
       ElMessage.error(response.data?.msg || '获取任务列表失败');
@@ -324,7 +425,7 @@ const useMockData = () => {
     { id: 2, fieldId: "test2", fieldUnitId: "test2", taskId: "test2", water: 2, fertilizerN: 2, fertilizerP: 2, fertilizerK: 2, startTime: "2025/03/23/03/35" }
   ];
   
-  taskList.value = mockData;
+  taskList.value = processTaskData(mockData);
   total.value = mockData.length;
 };
 
@@ -388,7 +489,7 @@ const loadFieldUnitOptions = async (fieldId) => {
 // 处理地块选择变化
 const handleFieldChange = (fieldId) => {
   // 清空已选择的灌溉单元
-  taskForm.fieldUnitId = ''
+  taskForm.fieldUnitIds = []
   
   // 查找地块对象以获取数据库ID(用于加载灌溉单元)
   const selectedField = fieldOptions.value.find(field => field.fieldId === fieldId);
@@ -408,7 +509,7 @@ const handleAddTask = () => {
   taskForm.id = ''
   taskForm.taskId = ''
   taskForm.fieldId = ''
-  taskForm.fieldUnitId = ''
+  taskForm.fieldUnitIds = []
   
   // 设置当前时间作为默认开始时间
   const now = new Date()
@@ -450,7 +551,17 @@ const handleEdit = (row) => {
     setFieldIdByFieldCode(row.fieldId);
   }
   
-  taskForm.fieldUnitId = row.fieldUnitId
+  // 处理灌溉单元数据
+  if (row.fieldUnitIds && Array.isArray(row.fieldUnitIds)) {
+    // 新格式：直接使用数组
+    taskForm.fieldUnitIds = row.fieldUnitIds;
+  } else if (row.fieldUnitId) {
+    // 旧格式：单个值转为数组
+    taskForm.fieldUnitIds = [row.fieldUnitId];
+  } else {
+    // 没有值：空数组
+    taskForm.fieldUnitIds = [];
+  }
   
   // 处理日期格式
   if (row.startTime) {
@@ -564,7 +675,7 @@ const submitForm = async () => {
           id: taskForm.id,
           taskId: taskForm.taskId,
           fieldId: taskForm.fieldId, // 直接使用地块编号字符串
-          fieldUnitId: taskForm.fieldUnitId,
+          fieldUnitIds: taskForm.fieldUnitIds,
           startTime: backendFormat,
           water: taskForm.water,
           fertilizerN: taskForm.fertilizerN,
@@ -595,6 +706,76 @@ const submitForm = async () => {
       }
     }
   })
+}
+
+// 判断灌溉单元是否可选
+const isUnitSelectable = (row) => {
+  return !taskForm.fieldUnitIds.includes(row.fieldUnitId);
+}
+
+// 切换灌溉单元选择状态
+const toggleUnitSelection = (row) => {
+  if (!taskForm.fieldUnitIds.includes(row.fieldUnitId)) {
+    taskForm.fieldUnitIds.push(row.fieldUnitId);
+  }
+}
+
+// 一键分组
+const handleToGroup = (row) => {
+  currentTask.value = row;
+  groupForm.taskId = row.id;
+  groupForm.groupId = '';
+  
+  // 加载分组列表
+  loadGroupOptions();
+  
+  // 显示对话框
+  groupDialogVisible.value = true;
+}
+
+// 加载分组列表
+const loadGroupOptions = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/group/list`);
+    
+    if (response.data.code === 200) {
+      groupOptions.value = response.data.value || [];
+    } else {
+      ElMessage.error(response.data.msg || '获取分组列表失败');
+    }
+  } catch (error) {
+    console.error('获取分组列表出错:', error);
+    ElMessage.error('获取分组列表失败，请稍后重试');
+  }
+}
+
+// 提交分组表单
+const submitGroupForm = async () => {
+  if (!groupForm.groupId) {
+    ElMessage.warning('请选择分组');
+    return;
+  }
+  
+  groupSubmitLoading.value = true;
+  
+  try {
+    const response = await axios.post(`${API_BASE_URL}/task/to/group`, {
+      groupId: groupForm.groupId,
+      taskId: groupForm.taskId
+    });
+    
+    if (response.data.code === 200) {
+      ElMessage.success(response.data.msg || '一键分组成功');
+      groupDialogVisible.value = false;
+    } else {
+      ElMessage.error(response.data.msg || '一键分组失败');
+    }
+  } catch (error) {
+    console.error('一键分组出错:', error);
+    ElMessage.error('网络错误，请稍后重试');
+  } finally {
+    groupSubmitLoading.value = false;
+  }
 }
 </script>
 
@@ -640,5 +821,12 @@ const submitForm = async () => {
 
 :deep(.el-input-number) {
   width: 100%;
+}
+
+/* 选中的灌溉单元容器 */
+.selected-units {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 }
 </style> 
