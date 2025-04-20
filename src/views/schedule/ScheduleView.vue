@@ -3,7 +3,10 @@
     <div class="content-card">
       <div class="header-section">
         <h2>灌溉调度方案</h2>
-        <el-button type="primary" @click="openScheduleDialog">生成调度方案</el-button>
+        <div class="action-buttons">
+          <el-button type="primary" @click="openScheduleDialog">整体性调度方案</el-button>
+          <el-button type="success" @click="openDifferentialDialog">差异性调度方案</el-button>
+        </div>
       </div>
       
       <el-divider />
@@ -22,7 +25,7 @@
       <!-- 生成调度方案对话框 -->
       <el-dialog
         v-model="dialogVisible"
-        title="生成调度方案"
+        title="整体性调度方案"
         width="500px"
         destroy-on-close
       >
@@ -98,7 +101,17 @@
             </el-select>
           </el-form-item>
           
-          <el-form-item label="施肥顺序" prop="sortType">
+          <el-form-item label="肥料类型" prop="fertilizerType">
+            <el-radio-group v-model="scheduleForm.fertilizerType">
+              <el-radio :label="1">顺序肥</el-radio>
+              <el-radio :label="2">混合肥</el-radio>
+            </el-radio-group>
+            <div class="form-tip">
+              顺序肥：按照设定顺序依次施肥；混合肥：同时混合施肥
+            </div>
+          </el-form-item>
+          
+          <el-form-item label="施肥顺序" prop="sortType" v-if="scheduleForm.fertilizerType === 1">
             <div class="fertilizer-sort-simple">
               <p class="sort-instruction">请拖动调整施肥顺序：</p>
               <div class="sort-items">
@@ -135,6 +148,18 @@
               </div>
             </div>
           </el-form-item>
+          
+          <el-form-item v-else>
+            <div class="mixed-fertilizer-info">
+              <el-alert
+                title="混合肥模式下，将同时混合并施加氮肥、磷肥和钾肥"
+                type="info"
+                description="混合肥模式无需设置施肥顺序，系统将根据任务中设定的肥料用量进行混合计算"
+                show-icon
+                :closable="false"
+              />
+            </div>
+          </el-form-item>
         </el-form>
         <template #footer>
           <span class="dialog-footer">
@@ -145,6 +170,28 @@
           </span>
         </template>
       </el-dialog>
+      
+      <!-- 差异性调度方案对话框 -->
+      <el-dialog
+        v-model="differentialDialogVisible"
+        title="差异性调度方案"
+        width="500px"
+      >
+        <div style="text-align: center; padding: 20px;">
+          <el-icon style="font-size: 48px; color: #67c23a; margin-bottom: 20px;"><WarningFilled /></el-icon>
+          <p style="font-size: 16px; color: #606266; margin-bottom: 15px;">
+            差异性调度方案功能正在开发中，敬请期待！
+          </p>
+          <p style="font-size: 14px; color: #909399;">
+            该功能将支持针对不同地块特性的个性化调度方案生成。
+          </p>
+        </div>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="differentialDialogVisible = false">关闭</el-button>
+          </span>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -152,6 +199,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { WarningFilled } from '@element-plus/icons-vue'
 import axios from 'axios'
 
 // API基础URL
@@ -159,6 +207,7 @@ const API_BASE_URL = '/api'
 
 // 表单相关
 const dialogVisible = ref(false)
+const differentialDialogVisible = ref(false)
 const formRef = ref(null)
 const generating = ref(false)
 const scheduleResult = ref('')
@@ -169,7 +218,8 @@ const scheduleForm = reactive({
   groupId: null,
   taskId: null,
   argumentId: null,
-  sortType: [1, 2, 3] // 默认顺序：氮肥、磷肥、钾肥
+  sortType: [1, 2, 3], // 默认顺序：氮肥、磷肥、钾肥
+  fertilizerType: 1 // 默认肥料类型：顺序肥
 })
 
 // 选项数据
@@ -198,7 +248,20 @@ const rules = {
   groupId: [{ required: true, message: '请选择分组', trigger: 'change' }],
   taskId: [{ required: true, message: '请选择任务', trigger: 'change' }],
   argumentId: [{ required: true, message: '请选择灌溉参数', trigger: 'change' }],
-  sortType: [{ type: 'array', required: true, message: '请设置施肥顺序', trigger: 'change' }]
+  sortType: [{
+    type: 'array',
+    required: true,
+    message: '请设置施肥顺序',
+    trigger: 'change',
+    validator: (rule, value, callback) => {
+      if (scheduleForm.fertilizerType === 1 && (!value || value.length === 0)) {
+        callback(new Error('请设置施肥顺序'));
+      } else {
+        callback();
+      }
+    }
+  }],
+  fertilizerType: [{ required: true, message: '请选择肥料类型', trigger: 'change' }]
 }
 
 // 上移肥料顺序
@@ -239,6 +302,8 @@ const initOrderFromSortType = () => {
 
 // 重置表单时的处理
 const resetForm = () => {
+  // 默认肥料类型：顺序肥
+  scheduleForm.fertilizerType = 1
   // 默认顺序：氮肥、磷肥、钾肥
   scheduleForm.sortType = [1, 2, 3]
   initOrderFromSortType()
@@ -248,6 +313,11 @@ const resetForm = () => {
 const openScheduleDialog = () => {
   dialogVisible.value = true
   resetForm()
+}
+
+// 打开差异性调度方案对话框
+const openDifferentialDialog = () => {
+  differentialDialogVisible.value = true
 }
 
 // 监听表单数据变化，更新显示顺序
@@ -343,7 +413,12 @@ const generateSchedule = async () => {
           sortType: sortTypeStr
         }
         
-        const response = await axios.get(`${API_BASE_URL}/work/work`, { params })
+        // 选择不同的API端点
+        const apiEndpoint = scheduleForm.fertilizerType === 1 
+          ? `${API_BASE_URL}/work/work`  // 顺序肥
+          : `${API_BASE_URL}/work/work/mix` // 混合肥
+        
+        const response = await axios.get(apiEndpoint, { params })
         
         if (response.data.code === 200) {
           scheduleResult.value = response.data.value
@@ -570,7 +645,7 @@ onMounted(() => {
 
 .item-actions {
   display: flex;
-  gap: 4px;
+  gap: 5px;
 }
 
 .transfer-actions {
@@ -637,5 +712,14 @@ onMounted(() => {
 .item-actions {
   display: flex;
   gap: 5px;
+}
+
+.mixed-fertilizer-info {
+  margin: 10px 0;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
 }
 </style> 
