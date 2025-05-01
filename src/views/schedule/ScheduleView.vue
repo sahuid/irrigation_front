@@ -176,19 +176,146 @@
         v-model="differentialDialogVisible"
         title="差异性调度方案"
         width="500px"
+        destroy-on-close
       >
-        <div style="text-align: center; padding: 20px;">
-          <el-icon style="font-size: 48px; color: #67c23a; margin-bottom: 20px;"><WarningFilled /></el-icon>
-          <p style="font-size: 16px; color: #606266; margin-bottom: 15px;">
-            差异性调度方案功能正在开发中，敬请期待！
-          </p>
-          <p style="font-size: 14px; color: #909399;">
-            该功能将支持针对不同地块特性的个性化调度方案生成。
-          </p>
-        </div>
+        <el-form
+          ref="differentialFormRef"
+          :model="differentialForm"
+          :rules="rules"
+          label-width="120px"
+          label-position="right"
+        >
+          <el-form-item label="地块" prop="fieldId">
+            <el-select 
+              v-model="differentialForm.fieldId" 
+              placeholder="请选择地块"
+              style="width: 100%"
+              filterable
+              @change="handleDifferentialFieldChange"
+            >
+              <el-option
+                v-for="field in fieldOptions"
+                :key="field.id"
+                :label="field.fieldId"
+                :value="field.id"
+              />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="分组" prop="groupId">
+            <el-select 
+              v-model="differentialForm.groupId" 
+              placeholder="请选择分组"
+              style="width: 100%"
+              filterable
+            >
+              <el-option
+                v-for="group in groupOptions"
+                :key="group.id"
+                :label="group.groupName"
+                :value="group.id"
+              />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="任务" prop="taskId">
+            <el-select 
+              v-model="differentialForm.taskId" 
+              placeholder="请选择任务"
+              style="width: 100%"
+              filterable
+            >
+              <el-option
+                v-for="task in taskOptions"
+                :key="task.id"
+                :label="task.taskId"
+                :value="task.id"
+              />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="灌溉参数" prop="argumentId">
+            <el-select 
+              v-model="differentialForm.argumentId" 
+              placeholder="请选择灌溉参数"
+              style="width: 100%"
+              filterable
+            >
+              <el-option
+                v-for="arg in argumentOptions"
+                :key="arg.id"
+                :label="`水肥比(${arg.water_and_fertilizer}:1) 流速(${arg.current_speed}L)`"
+                :value="arg.id"
+              />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="肥料类型" prop="fertilizerType">
+            <el-radio-group v-model="differentialForm.fertilizerType">
+              <el-radio :label="1">顺序肥</el-radio>
+              <el-radio :label="2">混合肥</el-radio>
+            </el-radio-group>
+            <div class="form-tip">
+              顺序肥：按照设定顺序依次施肥；混合肥：同时混合施肥
+            </div>
+          </el-form-item>
+          
+          <el-form-item label="施肥顺序" prop="sortType" v-if="differentialForm.fertilizerType === 1">
+            <div class="fertilizer-sort-simple">
+              <p class="sort-instruction">请拖动调整施肥顺序：</p>
+              <div class="sort-items">
+                <div 
+                  v-for="(item, index) in differentialFertilizersOrder" 
+                  :key="item.value"
+                  class="sort-item"
+                >
+                  <div class="sort-content">
+                    <span class="order-num">{{ index + 1 }}</span>
+                    <span class="sort-label">{{ item.label }}</span>
+                  </div>
+                  <div class="item-actions">
+                    <el-button 
+                      type="primary" 
+                      circle 
+                      plain
+                      size="small"
+                      :disabled="index === 0" 
+                      @click="differentialMoveItemUp(index)"
+                      title="上移"
+                    >↑</el-button>
+                    <el-button 
+                      type="primary" 
+                      circle 
+                      plain
+                      size="small"
+                      :disabled="index === differentialFertilizersOrder.length - 1" 
+                      @click="differentialMoveItemDown(index)"
+                      title="下移"
+                    >↓</el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-form-item>
+          
+          <el-form-item v-else>
+            <div class="mixed-fertilizer-info">
+              <el-alert
+                title="混合肥模式下，将同时混合并施加氮肥、磷肥和钾肥"
+                type="info"
+                description="混合肥模式无需设置施肥顺序，系统将根据任务中设定的肥料用量进行混合计算"
+                show-icon
+                :closable="false"
+              />
+            </div>
+          </el-form-item>
+        </el-form>
         <template #footer>
           <span class="dialog-footer">
-            <el-button @click="differentialDialogVisible = false">关闭</el-button>
+            <el-button @click="differentialDialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="generateDifferentialSchedule" :loading="differentialGenerating">
+              生成
+            </el-button>
           </span>
         </template>
       </el-dialog>
@@ -199,7 +326,6 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { WarningFilled } from '@element-plus/icons-vue'
 import axios from 'axios'
 
 // API基础URL
@@ -211,6 +337,7 @@ const differentialDialogVisible = ref(false)
 const formRef = ref(null)
 const generating = ref(false)
 const scheduleResult = ref('')
+const differentialGenerating = ref(false)
 
 // 表单数据
 const scheduleForm = reactive({
@@ -318,6 +445,7 @@ const openScheduleDialog = () => {
 // 打开差异性调度方案对话框
 const openDifferentialDialog = () => {
   differentialDialogVisible.value = true
+  resetDifferentialForm()
 }
 
 // 监听表单数据变化，更新显示顺序
@@ -432,6 +560,119 @@ const generateSchedule = async () => {
         ElMessage.error('生成调度方案失败，请稍后重试')
       } finally {
         generating.value = false
+      }
+    }
+  })
+}
+
+// 差异性调度方案表单相关
+const differentialFormRef = ref(null)
+const differentialForm = reactive({
+  fieldId: null,
+  groupId: null,
+  taskId: null,
+  argumentId: null,
+  sortType: [1, 2, 3], // 默认顺序：氮肥、磷肥、钾肥
+  fertilizerType: 1 // 默认肥料类型：顺序肥
+})
+
+// 差异性肥料顺序列表
+const differentialFertilizersOrder = ref([
+  { value: 1, label: '氮肥' },
+  { value: 2, label: '磷肥' },
+  { value: 3, label: '钾肥' }
+])
+
+// 差异性调度方案的上移肥料顺序
+const differentialMoveItemUp = (index) => {
+  if (index > 0) {
+    const temp = differentialFertilizersOrder.value[index]
+    differentialFertilizersOrder.value[index] = differentialFertilizersOrder.value[index - 1]
+    differentialFertilizersOrder.value[index - 1] = temp
+    updateDifferentialSortTypeFromOrder()
+  }
+}
+
+// 差异性调度方案的下移肥料顺序
+const differentialMoveItemDown = (index) => {
+  if (index < differentialFertilizersOrder.value.length - 1) {
+    const temp = differentialFertilizersOrder.value[index]
+    differentialFertilizersOrder.value[index] = differentialFertilizersOrder.value[index + 1]
+    differentialFertilizersOrder.value[index + 1] = temp
+    updateDifferentialSortTypeFromOrder()
+  }
+}
+
+// 从顺序列表更新差异性表单的sortType数组
+const updateDifferentialSortTypeFromOrder = () => {
+  differentialForm.sortType = differentialFertilizersOrder.value.map(item => item.value)
+}
+
+// 从差异性表单的sortType初始化顺序列表
+const initDifferentialOrderFromSortType = () => {
+  differentialFertilizersOrder.value = differentialForm.sortType.map(value => {
+    const matchedItem = fertilizersData.find(item => item.value === value)
+    return { 
+      value, 
+      label: matchedItem ? matchedItem.label : `未知(${value})` 
+    }
+  })
+}
+
+// 重置差异性表单时的处理
+const resetDifferentialForm = () => {
+  // 默认肥料类型：顺序肥
+  differentialForm.fertilizerType = 1
+  // 默认顺序：氮肥、磷肥、钾肥
+  differentialForm.sortType = [1, 2, 3]
+  initDifferentialOrderFromSortType()
+}
+
+// 处理差异性地块变化
+// eslint-disable-next-line no-unused-vars
+const handleDifferentialFieldChange = (fieldId) => {
+  // 如果需要基于地块筛选其他选项，可以在这里添加逻辑
+}
+
+// 生成差异性调度方案
+const generateDifferentialSchedule = async () => {
+  if (!differentialFormRef.value) return
+  
+  await differentialFormRef.value.validate(async (valid) => {
+    if (valid) {
+      differentialGenerating.value = true
+      
+      try {
+        // 将数组转换为逗号分隔的字符串，避免URL中的方括号
+        const sortTypeStr = differentialForm.sortType.join(',')
+        
+        const params = {
+          fieldId: differentialForm.fieldId,
+          groupId: differentialForm.groupId,
+          taskId: differentialForm.taskId,
+          argumentId: differentialForm.argumentId,
+          sortType: sortTypeStr
+        }
+        
+        // 选择不同的API端点
+        const apiEndpoint = differentialForm.fertilizerType === 1 
+          ? `${API_BASE_URL}/work/work/diff`  // 差异性-顺序肥使用新路径
+          : `${API_BASE_URL}/work/work/mix` // 混合肥与整体性保持一致
+        
+        const response = await axios.get(apiEndpoint, { params })
+        
+        if (response.data.code === 200) {
+          scheduleResult.value = response.data.value
+          ElMessage.success('差异性调度方案生成成功')
+          differentialDialogVisible.value = false
+        } else {
+          ElMessage.error(response.data.msg || '生成差异性调度方案失败')
+        }
+      } catch (error) {
+        console.error('生成差异性调度方案出错:', error)
+        ElMessage.error('生成差异性调度方案失败，请稍后重试')
+      } finally {
+        differentialGenerating.value = false
       }
     }
   })
