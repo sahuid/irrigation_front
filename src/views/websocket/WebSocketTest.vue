@@ -94,6 +94,132 @@
       
       <el-divider />
       
+      <div class="data-selector-section">
+        <h3>数据选择器</h3>
+        
+        <el-tabs v-model="dataSelectorActiveTab">
+          <el-tab-pane label="分组管理" name="groups">
+            <div class="data-selector-content">
+              <div class="table-operations">
+                <el-button type="primary" @click="loadGroupData">加载分组数据</el-button>
+                <el-input 
+                  v-model="groupSearchKeyword" 
+                  placeholder="搜索分组" 
+                  style="width: 200px; margin-left: 10px;" 
+                  clearable
+                />
+              </div>
+              
+              <el-table 
+                :data="filteredGroups" 
+                style="width: 100%" 
+                @selection-change="handleGroupSelectionChange"
+                border
+                v-loading="loadingGroups"
+              >
+                <el-table-column type="selection" width="55" />
+                <el-table-column prop="id" label="ID" width="100" />
+                <el-table-column prop="groupName" label="分组名称" />
+                <el-table-column label="关联地块数" width="120">
+                  <template #default="scope">
+                    {{ scope.row.fieldList ? scope.row.fieldList.length : 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="groupSize" label="面积(m²)" width="120">
+                  <template #default="scope">
+                    {{ scope.row.groupSize || '0' }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="createTime" label="创建时间" width="180" />
+              </el-table>
+              
+              <div class="export-actions">
+                <el-button 
+                  type="success" 
+                  @click="exportSelectedGroups" 
+                  :disabled="selectedGroups.length === 0"
+                >
+                  导出选中分组
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+          
+          <el-tab-pane label="地块管理" name="fields">
+            <div class="data-selector-content">
+              <div class="table-operations">
+                <el-button type="primary" @click="loadFieldData">加载地块数据</el-button>
+                <el-input 
+                  v-model="fieldSearchKeyword" 
+                  placeholder="搜索地块" 
+                  style="width: 200px; margin-left: 10px;" 
+                  clearable
+                />
+              </div>
+              
+              <el-table 
+                :data="filteredFields" 
+                style="width: 100%" 
+                @selection-change="handleFieldSelectionChange"
+                border
+                v-loading="loadingFields"
+              >
+                <el-table-column type="selection" width="55" />
+                <el-table-column prop="id" label="ID" width="100" />
+                <el-table-column prop="fieldName" label="地块名称" />
+                <el-table-column prop="fieldSize" label="面积(m²)" width="100">
+                  <template #default="scope">
+                    {{ scope.row.fieldSize || '0' }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="灌溉单元数" width="120">
+                  <template #default="scope">
+                    {{ (scope.row.irrigationUnit && scope.row.irrigationUnit.length) || 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="createTime" label="创建时间" width="180" />
+              </el-table>
+              
+              <div class="export-actions">
+                <el-button 
+                  type="success" 
+                  @click="exportSelectedFields" 
+                  :disabled="selectedFields.length === 0"
+                >
+                  导出选中地块
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+        
+        <div v-if="exportedJson" class="json-preview">
+          <div class="preview-header">
+            <h4>生成的JSON数据：</h4>
+            <div class="preview-actions">
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click="sendJsonToWebSocket" 
+                :disabled="!isConnectedFrontend"
+              >
+                发送到WebSocket
+              </el-button>
+              <el-button 
+                type="info" 
+                size="small" 
+                @click="copyJson"
+              >
+                复制JSON
+              </el-button>
+            </div>
+          </div>
+          <pre>{{ exportedJson }}</pre>
+        </div>
+      </div>
+      
+      <el-divider />
+      
       <div class="message-section">
         <div class="send-section">
           <h3>发送消息</h3>
@@ -234,8 +360,40 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { ElMessage } from 'element-plus';
+import axios from 'axios';
+
+// 数据选择器相关
+const dataSelectorActiveTab = ref('groups');
+const groupSearchKeyword = ref('');
+const fieldSearchKeyword = ref('');
+const selectedGroups = ref([]);
+const selectedFields = ref([]);
+const exportedJson = ref(null);
+const loadingGroups = ref(false);
+const loadingFields = ref(false);
+
+// 数据存储
+const groups = ref([]);
+const fields = ref([]);
+
+// 过滤数据
+const filteredGroups = computed(() => {
+  if (!groupSearchKeyword.value) return groups.value;
+  
+  return groups.value.filter(group => 
+    group.groupName && group.groupName.toLowerCase().includes(groupSearchKeyword.value.toLowerCase())
+  );
+});
+
+const filteredFields = computed(() => {
+  if (!fieldSearchKeyword.value) return fields.value;
+  
+  return fields.value.filter(field => 
+    field.fieldName && field.fieldName.toLowerCase().includes(fieldSearchKeyword.value.toLowerCase())
+  );
+});
 
 // 连接相关
 const frontendWsUrl = ref('ws://localhost:9001');
@@ -257,6 +415,91 @@ const backendMessagesContainer = ref(null);
 // WebSocket 实例
 let frontendSocket = null;
 let backendSocket = null;
+
+// 组件挂载时自动连接到前端WebSocket服务器
+onMounted(() => {
+  // 加载初始数据
+  loadGroupData();
+  loadFieldData();
+  
+  // 将初始连接延迟一下，避免页面刚加载就显示错误
+  setTimeout(() => {
+    connectToFrontend();
+  
+    // 尝试每隔5秒重新连接前端WebSocket
+    const reconnectInterval = setInterval(() => {
+      if (!isConnectedFrontend.value) {
+        console.log('尝试重新连接到前端WebSocket服务器...');
+        connectToFrontend();
+      }
+    }, 5000);
+    
+    // 清理定时器
+    onUnmounted(() => {
+      clearInterval(reconnectInterval);
+    });
+  }, 1000);
+});
+
+// 组件卸载时断开连接
+onUnmounted(() => {
+  disconnectFromFrontend();
+  disconnectFromBackend();
+});
+
+// 加载分组数据
+const loadGroupData = async () => {
+  loadingGroups.value = true;
+  groups.value = [];
+  
+  try {
+    const response = await axios.get('/api/group/query/page', {
+      params: {
+        page: 1,
+        pageSize: 100 // 获取较多数据
+      }
+    });
+    
+    if (response.data.code === 200) {
+      groups.value = response.data.value.records || [];
+      ElMessage.success('已加载分组数据');
+    } else {
+      ElMessage.error(response.data.msg || '获取分组数据失败');
+    }
+  } catch (error) {
+    console.error('获取分组数据出错:', error);
+    ElMessage.error('获取分组数据失败，请稍后重试');
+  } finally {
+    loadingGroups.value = false;
+  }
+};
+
+// 加载地块数据
+const loadFieldData = async () => {
+  loadingFields.value = true;
+  fields.value = [];
+  
+  try {
+    const response = await axios.get('/api/field/query/page', {
+      params: {
+        page: 1,
+        pageSize: 100 // 获取较多数据
+      }
+    });
+    
+    if (response.data.code === 200) {
+      fields.value = response.data.value.records || [];
+      ElMessage.success('已加载地块数据');
+    } else {
+      ElMessage.error(response.data.msg || '获取地块数据失败');
+    }
+  } catch (error) {
+    console.error('获取地块数据出错:', error);
+    ElMessage.error('获取地块数据失败，请稍后重试');
+  } finally {
+    loadingFields.value = false;
+  }
+};
 
 // 连接到前端WebSocket服务器
 const connectToFrontend = () => {
@@ -604,32 +847,96 @@ const clearBackendMessages = () => {
   backendMessages.value = [];
 };
 
-// 组件挂载时自动连接到前端WebSocket服务器
-onMounted(() => {
-  // 将初始连接延迟一下，避免页面刚加载就显示错误
-  setTimeout(() => {
-    connectToFrontend();
-  
-    // 尝试每隔5秒重新连接前端WebSocket
-    const reconnectInterval = setInterval(() => {
-      if (!isConnectedFrontend.value) {
-        console.log('尝试重新连接到前端WebSocket服务器...');
-        connectToFrontend();
-      }
-    }, 5000);
-    
-    // 清理定时器
-    onUnmounted(() => {
-      clearInterval(reconnectInterval);
-    });
-  }, 1000);
-});
+// 处理数据选择器相关操作
+const handleGroupSelectionChange = (selected) => {
+  selectedGroups.value = selected;
+};
 
-// 组件卸载时断开连接
-onUnmounted(() => {
-  disconnectFromFrontend();
-  disconnectFromBackend();
-});
+const handleFieldSelectionChange = (selected) => {
+  selectedFields.value = selected;
+};
+
+// 导出选中的分组数据
+const exportSelectedGroups = () => {
+  if (selectedGroups.value.length === 0) {
+    ElMessage.warning('请至少选择一个分组');
+    return;
+  }
+  
+  // 创建JSON数据
+  const jsonData = {
+    type: 'groups',
+    data: selectedGroups.value,
+    timestamp: new Date().toISOString()
+  };
+  
+  // 将JSON数据格式化为字符串并存储到exportedJson中
+  exportedJson.value = JSON.stringify(jsonData, null, 2);
+  
+  ElMessage.success('已导出选中的分组数据');
+};
+
+// 导出选中的地块数据
+const exportSelectedFields = () => {
+  if (selectedFields.value.length === 0) {
+    ElMessage.warning('请至少选择一个地块');
+    return;
+  }
+  
+  // 创建JSON数据
+  const jsonData = {
+    type: 'fields',
+    data: selectedFields.value,
+    selectedIds: selectedFields.value.map(field => field.id),
+    timestamp: new Date().toISOString()
+  };
+  
+  // 将JSON数据格式化为字符串并存储到exportedJson中
+  exportedJson.value = JSON.stringify(jsonData, null, 2);
+  
+  ElMessage.success('已导出选中的地块数据');
+};
+
+// 发送JSON数据到WebSocket
+const sendJsonToWebSocket = () => {
+  if (!isConnectedFrontend.value) {
+    ElMessage.warning('未连接到前端WebSocket服务器');
+    return;
+  }
+  
+  if (!exportedJson.value) {
+    ElMessage.warning('没有可发送的JSON数据');
+    return;
+  }
+  
+  try {
+    // 发送消息
+    frontendSocket.send(exportedJson.value);
+    
+    // 添加发送的消息到消息列表
+    addFrontendMessage('sent', exportedJson.value);
+    
+    ElMessage.success('已发送JSON数据到WebSocket');
+  } catch (error) {
+    console.error('发送JSON数据到WebSocket时出错:', error);
+    ElMessage.error('发送JSON数据失败');
+  }
+};
+
+// 复制JSON数据
+const copyJson = () => {
+  if (!exportedJson.value) {
+    ElMessage.warning('没有可复制的JSON数据');
+    return;
+  }
+  
+  navigator.clipboard.writeText(exportedJson.value)
+    .then(() => ElMessage.success('JSON数据已复制到剪贴板'))
+    .catch(err => {
+      console.error('复制失败:', err);
+      ElMessage.error('复制失败');
+    });
+};
 </script>
 
 <style scoped>
@@ -870,5 +1177,48 @@ onUnmounted(() => {
 
 h2, h3, h4 {
   margin: 0;
+}
+
+.data-selector-section {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.data-selector-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.table-operations {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.export-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.json-preview {
+  margin-top: 15px;
+  background-color: #f5f7fa;
+  padding: 15px;
+  border-radius: 4px;
+  border-left: 4px solid #67C23A;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 10px;
 }
 </style> 
