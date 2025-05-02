@@ -3,183 +3,543 @@
     <div class="content-card">
       <div class="header-section">
         <h2>WebSocket 测试</h2>
-        <el-tag :type="isConnected ? 'success' : 'danger'" effect="dark">
-          {{ isConnected ? '已连接' : '未连接' }}
-        </el-tag>
+        <el-tag type="info" effect="dark">双WebSocket连接模式</el-tag>
+      </div>
+      
+      <el-divider />
+      
+      <div class="websocket-config">
+        <h3>WebSocket 连接配置</h3>
+        
+        <h4>前端WebSocket服务</h4>
+        <div class="config-form">
+          <div class="form-item">
+            <label>前端WebSocket地址：</label>
+            <el-input 
+              v-model="frontendWsUrl" 
+              placeholder="例如: ws://localhost:9001"
+              disabled
+            >
+              <template #append>
+                <el-button @click="copyFrontendUrl">
+                  复制
+                </el-button>
+              </template>
+            </el-input>
+          </div>
+          
+          <p class="note">
+            <i class="el-icon-info"></i> 
+            前端WebSocket服务器需要单独启动，运行 <code>node websocket-server.js</code> 命令。
+          </p>
+        </div>
+        
+        <el-divider></el-divider>
+        
+        <h4>后端WebSocket连接</h4>
+        <div class="config-form">
+          <div class="form-item">
+            <label>后端WebSocket地址：</label>
+            <el-input 
+              v-model="backendWsUrl" 
+              placeholder="例如: ws://localhost:9000/api/chat"
+            >
+              <template #append>
+                <el-button @click="copyBackendUrl">
+                  复制
+                </el-button>
+              </template>
+            </el-input>
+          </div>
+          
+          <div class="connection-buttons">
+            <el-button 
+              type="primary" 
+              @click="connectToBackend" 
+              :disabled="isConnectedBackend || !backendWsUrl"
+              :loading="isConnectingBackend"
+            >
+              连接到后端
+            </el-button>
+            <el-button 
+              type="danger" 
+              @click="disconnectFromBackend" 
+              :disabled="!isConnectedBackend"
+            >
+              断开连接
+            </el-button>
+          </div>
+        </div>
+      </div>
+      
+      <el-divider />
+      
+      <div class="status-section">
+        <h3>连接状态</h3>
+        <div class="status-container">
+          <div class="status-item">
+            <label>前端WebSocket：</label>
+            <el-tag :type="isConnectedFrontend ? 'success' : 'danger'">
+              {{ isConnectedFrontend ? '服务器运行中' : '服务器未运行' }}
+            </el-tag>
+          </div>
+          <div class="status-item">
+            <label>后端WebSocket：</label>
+            <el-tag :type="isConnectedBackend ? 'success' : 'danger'">
+              {{ isConnectedBackend ? '已连接' : '未连接' }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
+      
+      <el-divider />
+      
+      <div class="message-section">
+        <div class="send-section">
+          <h3>发送消息</h3>
+          <el-tabs v-model="sendTabActive" type="card">
+            <el-tab-pane label="向前端发送" name="frontend">
+              <div class="tab-content">
+                <el-input
+                  v-model="frontendMessageToSend"
+                  type="textarea"
+                  :rows="5"
+                  placeholder="请输入要发送到前端WebSocket服务器的消息"
+                />
+                <div class="message-controls">
+                  <el-button
+                    type="primary"
+                    @click="sendFrontendMessage"
+                    :disabled="!isConnectedFrontend || !frontendMessageToSend.trim()"
+                  >
+                    发送消息
+                  </el-button>
+                  <el-button
+                    type="warning"
+                    @click="formatFrontendMessage"
+                    :disabled="!frontendMessageToSend.trim()"
+                  >
+                    格式化JSON
+                  </el-button>
+                </div>
+              </div>
+            </el-tab-pane>
+            <el-tab-pane label="向后端发送" name="backend">
+              <div class="tab-content">
+                <el-input
+                  v-model="backendMessageToSend"
+                  type="textarea"
+                  :rows="5"
+                  placeholder="请输入要发送到后端WebSocket的消息"
+                />
+                <div class="message-controls">
+                  <el-button
+                    type="primary"
+                    @click="sendBackendMessage"
+                    :disabled="!isConnectedBackend || !backendMessageToSend.trim()"
+                  >
+                    发送消息
+                  </el-button>
+                  <el-button
+                    type="success"
+                    @click="generateTaskTemplate"
+                  >
+                    生成任务模板
+                  </el-button>
+                  <el-button
+                    type="warning"
+                    @click="formatBackendMessage"
+                    :disabled="!backendMessageToSend.trim()"
+                  >
+                    格式化JSON
+                  </el-button>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+        
+        <div class="receive-section">
+          <h3>消息历史</h3>
+          <el-tabs v-model="receiveTabActive" type="card">
+            <el-tab-pane label="前端消息" name="frontend">
+              <div class="messages-container" ref="frontendMessagesContainer">
+                <div 
+                  v-for="(msg, index) in frontendMessages" 
+                  :key="index" 
+                  :class="['message-item', msg.type]"
+                >
+                  <div class="message-header">
+                    <span class="message-type">{{ getFrontendMessageType(msg) }}</span>
+                    <span class="message-time">{{ msg.time }}</span>
+                  </div>
+                  <pre class="message-content">{{ msg.content }}</pre>
+                </div>
+                <div v-if="frontendMessages.length === 0" class="empty-message">
+                  暂无消息
+                </div>
+              </div>
+              <div class="messages-controls">
+                <el-button type="info" @click="clearFrontendMessages">清空消息</el-button>
+              </div>
+            </el-tab-pane>
+            <el-tab-pane label="后端消息" name="backend">
+              <div class="messages-container" ref="backendMessagesContainer">
+                <div 
+                  v-for="(msg, index) in backendMessages" 
+                  :key="index" 
+                  :class="['message-item', msg.type]"
+                >
+                  <div class="message-header">
+                    <span class="message-type">{{ msg.type === 'sent' ? '已发送' : '已接收' }}</span>
+                    <span class="message-time">{{ msg.time }}</span>
+                  </div>
+                  <pre class="message-content">{{ msg.content }}</pre>
+                </div>
+                <div v-if="backendMessages.length === 0" class="empty-message">
+                  暂无消息
+                </div>
+              </div>
+              <div class="messages-controls">
+                <el-button type="info" @click="clearBackendMessages">清空消息</el-button>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
       </div>
       
       <el-divider />
       
       <div class="apifox-guide">
         <h3>Apifox 连接指南</h3>
-        <div class="guide-content">
-          <div class="websocket-url">
-            <span>WebSocket URL: </span>
-            <el-tag type="info">{{ websocketUrl }}</el-tag>
-            <el-button type="primary" size="small" @click="copyWebsocketUrl" style="margin-left: 10px;">
-              复制
-            </el-button>
-          </div>
-          <p>1. 在Apifox中创建WebSocket请求，使用上方URL进行连接</p>
-          <p>2. 发送JSON格式的任务数据，包含以下字段：</p>
-          <div class="code-block">
-            <pre>{
-  "type": "saveTask",
-  "data": {
-    "taskId": "任务ID",
-    "fieldId": "地块ID",
-    "fieldUnitIds": ["灌溉单元ID1", "灌溉单元ID2"],
-    "startTime": "2023-06-01 08:00:00",
-    "water": 100,
-    "fertilizerN": 10,
-    "fertilizerP": 20,
-    "fertilizerK": 30
-  }
-}</pre>
-          </div>
-          <p>3. 系统将保存任务数据并返回结果</p>
-        </div>
-      </div>
-      
-      <el-divider />
-      
-      <div class="chat-section">
-        <div class="chat-display" ref="chatDisplayRef">
-          <div v-if="messages.length === 0" class="no-messages">
-            暂无消息记录
-          </div>
-          <div v-for="(message, index) in messages" :key="index" class="message-item" :class="message.type">
-            <div class="message-header">
-              <span class="message-direction">{{ message.type === 'sent' ? '发送' : '接收' }}</span>
-              <span class="message-time">{{ message.time }}</span>
-            </div>
-            <div class="message-content" v-if="isJsonString(message.content)">
-              <pre>{{ formatJson(message.content) }}</pre>
-            </div>
-            <div class="message-content" v-else>{{ message.content }}</div>
-          </div>
-        </div>
+        <p>现在有两种方式与WebSocket交互：</p>
         
-        <div class="chat-input">
-          <el-input
-            v-model="messageToSend"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入JSON消息，例如任务数据"
-            :disabled="!isConnected"
-            @keyup.ctrl.enter="sendMessage"
-          />
-          <div class="button-group">
-            <el-tooltip content="使用Ctrl+Enter快速发送">
-              <el-button 
-                type="primary" 
-                @click="sendMessage" 
-                :disabled="!isConnected || !messageToSend.trim()"
-              >
-                发送消息
-              </el-button>
-            </el-tooltip>
-            <el-button
-              type="success"
-              @click="sendTaskTemplate"
-              :disabled="!isConnected"
-            >
-              发送任务模板
-            </el-button>
-          </div>
-        </div>
+        <h4>方式1：使用Apifox连接前端WebSocket服务器</h4>
+        <ol>
+          <li>在Apifox中创建WebSocket请求</li>
+          <li>使用前端WebSocket地址 <code>ws://localhost:9001</code> 作为连接地址</li>
+          <li>连接成功后，在Apifox中发送消息到前端WebSocket服务器</li>
+          <li>所有连接到前端WebSocket服务器的客户端都将收到消息</li>
+        </ol>
+        
+        <h4>方式2：使用Apifox连接后端WebSocket</h4>
+        <ol>
+          <li>在Apifox中创建WebSocket请求</li>
+          <li>使用后端WebSocket地址作为连接地址</li>
+          <li>连接成功后，可以在Apifox中直接与后端通信</li>
+        </ol>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ElMessage } from 'element-plus';
 
-// WebSocket 连接
-let ws = null
-const isConnected = ref(false)
-const websocketUrl = ref('ws://localhost:9000/api/chat')
+// 连接相关
+const frontendWsUrl = ref('ws://localhost:9001');
+const backendWsUrl = ref('ws://localhost:9000/api/chat');
+const isConnectedFrontend = ref(false);
+const isConnectedBackend = ref(false);
+const isConnectingBackend = ref(false);
 
 // 消息相关
-const messageToSend = ref('')
-const messages = ref([])
-const chatDisplayRef = ref(null)
+const sendTabActive = ref('frontend');
+const receiveTabActive = ref('frontend');
+const frontendMessageToSend = ref('');
+const backendMessageToSend = ref('');
+const frontendMessages = ref([]);
+const backendMessages = ref([]);
+const frontendMessagesContainer = ref(null);
+const backendMessagesContainer = ref(null);
 
-// 建立 WebSocket 连接
-const connectWebSocket = () => {
+// WebSocket 实例
+let frontendSocket = null;
+let backendSocket = null;
+
+// 连接到前端WebSocket服务器
+const connectToFrontend = () => {
   try {
-    ws = new WebSocket(websocketUrl.value)
+    console.log('尝试连接到前端WebSocket服务器:', frontendWsUrl.value);
     
-    ws.onopen = () => {
-      isConnected.value = true
-      addMessage('WebSocket 连接已建立', 'received')
+    // 如果之前的连接存在，先关闭
+    if (frontendSocket) {
+      frontendSocket.close();
+      frontendSocket = null;
     }
     
-    ws.onmessage = (event) => {
-      addMessage(event.data, 'received')
-      
-      // 尝试解析消息，检查是否是任务保存响应
+    // 创建WebSocket连接到前端服务器
+    frontendSocket = new WebSocket(frontendWsUrl.value);
+    
+    // 连接成功时
+    frontendSocket.onopen = () => {
+      console.log('成功连接到前端WebSocket服务器');
+      isConnectedFrontend.value = true;
+      ElMessage.success('已连接到前端WebSocket服务器');
+    };
+    
+    // 收到消息时
+    frontendSocket.onmessage = (event) => {
+      console.log('收到前端WebSocket消息:', event.data);
       try {
-        const data = JSON.parse(event.data)
-        if (data.type === 'taskSaved') {
-          ElMessage.success('任务保存成功！')
+        // 尝试解析为JSON
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'system') {
+          // 系统消息
+          addFrontendMessage('system', JSON.stringify(data.data, null, 2));
+        } else if (data.type === 'history') {
+          // 历史消息
+          data.data.forEach(msg => {
+            addFrontendMessage('history', msg.content);
+          });
+        } else {
+          // 其他消息
+          addFrontendMessage('received', event.data);
         }
+      } catch (error) {
+        // 普通文本消息
+        addFrontendMessage('received', event.data);
+      }
+    };
+    
+    // 连接错误时
+    frontendSocket.onerror = (error) => {
+      console.error('前端WebSocket连接错误:', error);
+      ElMessage.error('连接到前端WebSocket服务器时出错，请确保服务器已启动');
+      disconnectFromFrontend();
+      
+      // 添加错误消息到消息列表
+      addFrontendMessage('system', JSON.stringify({
+        message: '连接到前端WebSocket服务器时出错，请确保服务器已启动',
+        time: new Date().toISOString()
+      }, null, 2));
+    };
+    
+    // 连接关闭时
+    frontendSocket.onclose = (event) => {
+      console.log('前端WebSocket连接关闭, 代码:', event.code, '原因:', event.reason);
+      if (isConnectedFrontend.value) {
+        ElMessage.info('前端WebSocket连接已关闭');
+        
+        // 添加关闭消息到消息列表
+        addFrontendMessage('system', JSON.stringify({
+          message: `连接已关闭 (代码: ${event.code})`,
+          time: new Date().toISOString()
+        }, null, 2));
+      }
+      disconnectFromFrontend();
+    };
+  } catch (error) {
+    console.error('创建前端WebSocket连接时出错:', error);
+    ElMessage.error(`创建前端WebSocket连接时出错: ${error.message}`);
+    
+    // 添加错误消息到消息列表
+    addFrontendMessage('system', JSON.stringify({
+      message: `创建WebSocket连接失败: ${error.message}`,
+      time: new Date().toISOString()
+    }, null, 2));
+  }
+};
+
+// 断开与前端WebSocket服务器的连接
+const disconnectFromFrontend = () => {
+  if (frontendSocket) {
+    frontendSocket.close();
+    frontendSocket = null;
+  }
+  isConnectedFrontend.value = false;
+};
+
+// 连接到后端WebSocket
+const connectToBackend = async () => {
+  if (isConnectedBackend.value || !backendWsUrl.value) return;
+  
+  try {
+    isConnectingBackend.value = true;
+    
+    // 连接到后端WebSocket
+    backendSocket = new WebSocket(backendWsUrl.value);
+    
+    // 监听后端连接打开
+    backendSocket.onopen = () => {
+      isConnectedBackend.value = true;
+      ElMessage.success('已成功连接到后端WebSocket');
+    };
+    
+    // 监听后端消息
+    backendSocket.onmessage = (event) => {
+      const message = event.data;
+      
+      // 添加到消息列表
+      addBackendMessage('received', message);
+    };
+    
+    // 监听后端连接错误
+    backendSocket.onerror = (error) => {
+      console.error('后端WebSocket连接错误:', error);
+      ElMessage.error('连接到后端WebSocket时出错');
+      disconnectFromBackend();
+    };
+    
+    // 监听后端连接关闭
+    backendSocket.onclose = () => {
+      if (isConnectedBackend.value) {
+        ElMessage.info('后端WebSocket连接已关闭');
+        disconnectFromBackend();
+      }
+    };
+    
+  } catch (error) {
+    console.error('创建WebSocket连接时出错:', error);
+    ElMessage.error(`创建WebSocket连接时出错: ${error.message}`);
+    disconnectFromBackend();
+  } finally {
+    isConnectingBackend.value = false;
+  }
+};
+
+// 断开与后端的连接
+const disconnectFromBackend = () => {
+  // 关闭后端Socket
+  if (backendSocket) {
+    backendSocket.close();
+    backendSocket = null;
+  }
+  
+  // 更新状态
+  isConnectedBackend.value = false;
+  
+  ElMessage.info('已断开后端WebSocket连接');
+};
+
+// 添加前端消息到列表
+const addFrontendMessage = (type, content) => {
+  try {
+    // 尝试格式化JSON
+    if (typeof content === 'string') {
+      try {
+        const formattedContent = JSON.parse(content);
+        content = JSON.stringify(formattedContent, null, 2);
       } catch (e) {
-        // 非JSON消息，不做处理
+        // 如果不是JSON则保持原样
       }
     }
     
-    ws.onerror = (error) => {
-      console.error('WebSocket 错误:', error)
-      ElMessage.error('WebSocket 连接错误')
-      isConnected.value = false
+    frontendMessages.value.push({
+      type, // 'sent', 'received', 'system', 'history'
+      content,
+      time: new Date().toLocaleTimeString()
+    });
+    
+    // 滚动到最新消息
+    nextTick(() => {
+      if (frontendMessagesContainer.value) {
+        frontendMessagesContainer.value.scrollTop = frontendMessagesContainer.value.scrollHeight;
+      }
+    });
+  } catch (error) {
+    console.error('添加前端消息时出错:', error);
+  }
+};
+
+// 添加后端消息到列表
+const addBackendMessage = (type, content) => {
+  try {
+    // 尝试格式化JSON
+    if (typeof content === 'string') {
+      try {
+        const formattedContent = JSON.parse(content);
+        content = JSON.stringify(formattedContent, null, 2);
+      } catch (e) {
+        // 如果不是JSON则保持原样
+      }
     }
     
-    ws.onclose = () => {
-      isConnected.value = false
-      addMessage('WebSocket 连接已关闭', 'received')
-    }
+    backendMessages.value.push({
+      type, // 'sent' 或 'received'
+      content,
+      time: new Date().toLocaleTimeString()
+    });
+    
+    // 滚动到最新消息
+    nextTick(() => {
+      if (backendMessagesContainer.value) {
+        backendMessagesContainer.value.scrollTop = backendMessagesContainer.value.scrollHeight;
+      }
+    });
   } catch (error) {
-    console.error('建立 WebSocket 连接失败:', error)
-    ElMessage.error('建立 WebSocket 连接失败')
-    isConnected.value = false
+    console.error('添加后端消息时出错:', error);
   }
-}
+};
 
-// 判断字符串是否为JSON格式
-const isJsonString = (str) => {
+// 发送消息到前端WebSocket服务器
+const sendFrontendMessage = () => {
+  if (!isConnectedFrontend.value || !frontendMessageToSend.value.trim()) return;
+  
   try {
-    JSON.parse(str)
-    return true
-  } catch (e) {
-    return false
+    // 发送消息到前端WebSocket服务器
+    frontendSocket.send(frontendMessageToSend.value);
+    
+    // 添加到消息列表
+    addFrontendMessage('sent', frontendMessageToSend.value);
+    
+    // 清空输入框
+    frontendMessageToSend.value = '';
+  } catch (error) {
+    console.error('发送前端消息时出错:', error);
+    ElMessage.error('发送消息到前端WebSocket服务器时出错');
   }
-}
+};
 
-// 格式化JSON字符串
-const formatJson = (jsonString) => {
+// 发送消息到后端
+const sendBackendMessage = () => {
+  if (!isConnectedBackend.value || !backendMessageToSend.value.trim()) return;
+  
   try {
-    const obj = JSON.parse(jsonString)
-    return JSON.stringify(obj, null, 2)
-  } catch (e) {
-    return jsonString
+    // 发送消息到后端
+    backendSocket.send(backendMessageToSend.value);
+    
+    // 添加到消息列表
+    addBackendMessage('sent', backendMessageToSend.value);
+    
+    // 清空输入框
+    backendMessageToSend.value = '';
+  } catch (error) {
+    console.error('发送后端消息时出错:', error);
+    ElMessage.error('发送消息到后端时出错');
   }
-}
+};
 
-// 复制WebSocket URL
-const copyWebsocketUrl = () => {
-  navigator.clipboard.writeText(websocketUrl.value)
-    .then(() => ElMessage.success('WebSocket URL已复制到剪贴板'))
-    .catch(err => {
-      console.error('复制失败:', err)
-      ElMessage.error('复制失败')
-    })
-}
+// 格式化前端JSON消息
+const formatFrontendMessage = () => {
+  try {
+    if (!frontendMessageToSend.value.trim()) return;
+    
+    const obj = JSON.parse(frontendMessageToSend.value);
+    frontendMessageToSend.value = JSON.stringify(obj, null, 2);
+    ElMessage.success('JSON格式化成功');
+  } catch (e) {
+    ElMessage.error('无效的JSON格式');
+  }
+};
 
-// 发送任务模板
-const sendTaskTemplate = () => {
+// 格式化后端JSON消息
+const formatBackendMessage = () => {
+  try {
+    if (!backendMessageToSend.value.trim()) return;
+    
+    const obj = JSON.parse(backendMessageToSend.value);
+    backendMessageToSend.value = JSON.stringify(obj, null, 2);
+    ElMessage.success('JSON格式化成功');
+  } catch (e) {
+    ElMessage.error('无效的JSON格式');
+  }
+};
+
+// 生成任务模板
+const generateTaskTemplate = () => {
   const taskTemplate = {
     type: "saveTask",
     data: {
@@ -192,67 +552,101 @@ const sendTaskTemplate = () => {
       fertilizerP: 20,
       fertilizerK: 30
     }
+  };
+  
+  backendMessageToSend.value = JSON.stringify(taskTemplate, null, 2);
+  ElMessage.success('已生成任务模板');
+};
+
+// 获取前端消息类型文本
+const getFrontendMessageType = (msg) => {
+  switch (msg.type) {
+    case 'sent':
+      return '已发送';
+    case 'received':
+      return '已接收';
+    case 'system':
+      return '系统消息';
+    case 'history':
+      return '历史消息';
+    default:
+      return msg.type;
   }
-  
-  messageToSend.value = JSON.stringify(taskTemplate, null, 2)
-}
+};
 
-// 发送消息
-const sendMessage = () => {
-  if (!isConnected.value || !ws || !messageToSend.value.trim()) return
-  
-  try {
-    ws.send(messageToSend.value)
-    addMessage(messageToSend.value, 'sent')
-    messageToSend.value = ''
-  } catch (error) {
-    console.error('发送消息失败:', error)
-    ElMessage.error('发送消息失败')
-  }
-}
+// 复制前端WebSocket URL
+const copyFrontendUrl = () => {
+  navigator.clipboard.writeText(frontendWsUrl.value)
+    .then(() => ElMessage.success('前端WebSocket URL已复制到剪贴板'))
+    .catch(err => {
+      console.error('复制失败:', err);
+      ElMessage.error('复制失败');
+    });
+};
 
-// 添加消息到消息列表
-const addMessage = (content, type) => {
-  const now = new Date()
-  const timeString = now.toLocaleTimeString()
-  
-  messages.value.push({
-    content,
-    type,
-    time: timeString
-  })
-  
-  // 滚动到底部
-  nextTick(() => {
-    if (chatDisplayRef.value) {
-      chatDisplayRef.value.scrollTop = chatDisplayRef.value.scrollHeight
-    }
-  })
-}
+// 复制后端URL
+const copyBackendUrl = () => {
+  navigator.clipboard.writeText(backendWsUrl.value)
+    .then(() => ElMessage.success('后端WebSocket URL已复制到剪贴板'))
+    .catch(err => {
+      console.error('复制失败:', err);
+      ElMessage.error('复制失败');
+    });
+};
 
-// 组件挂载时自动连接
+// 清空前端消息
+const clearFrontendMessages = () => {
+  frontendMessages.value = [];
+};
+
+// 清空后端消息
+const clearBackendMessages = () => {
+  backendMessages.value = [];
+};
+
+// 组件挂载时自动连接到前端WebSocket服务器
 onMounted(() => {
-  connectWebSocket()
-})
+  // 将初始连接延迟一下，避免页面刚加载就显示错误
+  setTimeout(() => {
+    connectToFrontend();
+  
+    // 尝试每隔5秒重新连接前端WebSocket
+    const reconnectInterval = setInterval(() => {
+      if (!isConnectedFrontend.value) {
+        console.log('尝试重新连接到前端WebSocket服务器...');
+        connectToFrontend();
+      }
+    }, 5000);
+    
+    // 清理定时器
+    onUnmounted(() => {
+      clearInterval(reconnectInterval);
+    });
+  }, 1000);
+});
 
-// 组件卸载时关闭连接
+// 组件卸载时断开连接
 onUnmounted(() => {
-  if (ws) {
-    ws.close()
-  }
-})
+  disconnectFromFrontend();
+  disconnectFromBackend();
+});
 </script>
 
 <style scoped>
 .websocket-test {
-  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .content-card {
   background-color: #fff;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
   padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .header-section {
@@ -262,87 +656,146 @@ onUnmounted(() => {
   margin-bottom: 10px;
 }
 
-.apifox-guide {
+.websocket-config {
   background-color: #f8f9fa;
   border-radius: 4px;
   padding: 15px;
   margin-bottom: 20px;
 }
 
-.apifox-guide h3 {
+.websocket-config h3 {
   margin-top: 0;
   margin-bottom: 15px;
   color: #409EFF;
 }
 
-.guide-content {
-  font-size: 14px;
+.websocket-config h4 {
+  margin: 10px 0;
   color: #606266;
 }
 
-.guide-content p {
-  margin: 8px 0;
-}
-
-.websocket-url {
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-}
-
-.code-block {
-  background-color: #282c34;
-  border-radius: 4px;
-  padding: 10px;
-  margin: 10px 0;
-  color: #abb2bf;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 13px;
-  overflow-x: auto;
-}
-
-.code-block pre {
-  margin: 0;
-}
-
-.chat-section {
+.config-form {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  margin-bottom: 15px;
 }
 
-.chat-display {
-  height: 350px;
-  overflow-y: auto;
-  padding: 15px;
-  background-color: #f5f7fa;
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-item label {
+  font-weight: bold;
+  color: #606266;
+}
+
+.connection-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.note {
+  background-color: #e6f7ff;
+  padding: 8px 12px;
   border-radius: 4px;
-  border: 1px solid #e4e7ed;
+  border-left: 4px solid #1890ff;
+  color: #606266;
+  font-size: 14px;
+  margin: 10px 0;
 }
 
-.no-messages {
-  text-align: center;
-  color: #909399;
-  padding: 20px;
+.note code {
+  background-color: rgba(0, 0, 0, 0.04);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.status-section {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.status-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-item label {
+  font-weight: bold;
+  color: #606266;
+  min-width: 120px;
+}
+
+.message-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.send-section,
+.receive-section {
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 15px;
+}
+
+.tab-content {
+  padding: 15px 0;
+}
+
+.message-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.messages-container {
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 10px;
+  background-color: #f5f7fa;
+  margin-bottom: 10px;
 }
 
 .message-item {
   margin-bottom: 15px;
-  display: flex;
-  flex-direction: column;
-  max-width: 90%;
-  border-radius: 4px;
   padding: 10px;
+  border-radius: 4px;
+  background-color: #fff;
+  border-left: 4px solid #409EFF;
 }
 
 .message-item.sent {
-  align-self: flex-end;
-  background-color: #ecf5ff;
+  border-left-color: #67C23A;
 }
 
 .message-item.received {
-  align-self: flex-start;
-  background-color: #f4f4f5;
+  border-left-color: #E6A23C;
+}
+
+.message-item.system {
+  border-left-color: #F56C6C;
+}
+
+.message-item.history {
+  border-left-color: #909399;
+  opacity: 0.8;
 }
 
 .message-header {
@@ -350,38 +803,72 @@ onUnmounted(() => {
   justify-content: space-between;
   margin-bottom: 5px;
   font-size: 12px;
-}
-
-.message-direction {
-  font-weight: bold;
-  color: #409EFF;
-}
-
-.message-time {
   color: #909399;
 }
 
 .message-content {
-  word-break: break-word;
-}
-
-.message-content pre {
   margin: 0;
   white-space: pre-wrap;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: #303133;
 }
 
-.chat-input {
-  margin-top: 10px;
-}
-
-.button-group {
+.messages-controls {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 10px;
 }
 
-h2, h3 {
+.apifox-guide {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 15px;
+}
+
+.apifox-guide h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #409EFF;
+}
+
+.apifox-guide h4 {
+  margin: 15px 0 10px;
+  color: #606266;
+}
+
+.apifox-guide p {
+  margin: 8px 0;
+  color: #606266;
+}
+
+.apifox-guide ol {
+  padding-left: 20px;
+  color: #606266;
+  margin-bottom: 15px;
+}
+
+.apifox-guide li {
+  margin-bottom: 5px;
+}
+
+.apifox-guide code {
+  background-color: #e6f7ff;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #1890ff;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.empty-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  color: #909399;
+  font-style: italic;
+}
+
+h2, h3, h4 {
   margin: 0;
 }
 </style> 

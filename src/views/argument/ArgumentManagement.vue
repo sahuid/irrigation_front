@@ -350,7 +350,7 @@ const handleDeleteArgument = (row) => {
     }
   ).then(async () => {
     try {
-      const response = await axios.delete(`${API_BASE_URL}/argument/delete`, {
+      const response = await axios.post(`${API_BASE_URL}/argument/delete`, null, {
         params: { id: row.id }
       })
       
