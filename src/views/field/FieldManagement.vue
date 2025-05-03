@@ -187,6 +187,21 @@
               </div>
               <span class="location-hint">至少需要3个点才能形成有效的灌溉单元范围</span>
             </div>
+            <div class="batch-input-container">
+              <el-input
+                v-model="batchCoordinates"
+                type="textarea"
+                :rows="3"
+                placeholder="请输入批量坐标格式如：{87.29547234,44.21764995},{87.29537416,44.21707246}，第一个是经度，第二个是纬度"
+              />
+              <el-button 
+                type="primary" 
+                @click="parseBatchCoordinates" 
+                style="margin-top: 8px;"
+              >
+                解析坐标
+              </el-button>
+            </div>
             <el-table :data="fieldForm.fieldRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
               <el-table-column label="纬度" prop="latitude">
@@ -194,7 +209,7 @@
                   <el-input-number 
                     v-model="scope.row.latitude" 
                     :controls="false" 
-                    :precision="6"
+                    :precision="3"
                     style="width: 100%"
                   />
                 </template>
@@ -204,7 +219,7 @@
                   <el-input-number 
                     v-model="scope.row.longitude" 
                     :controls="false" 
-                    :precision="6"
+                    :precision="3"
                     style="width: 100%"
                   />
                 </template>
@@ -270,6 +285,21 @@
               </div>
               <span class="location-hint">至少需要3个点才能形成有效的灌溉单元范围</span>
             </div>
+            <div class="batch-input-container">
+              <el-input
+                v-model="batchIrrigationUnitCoordinates"
+                type="textarea"
+                :rows="3"
+                placeholder="请输入批量坐标格式如：{87.29547234,44.21764995},{87.29537416,44.21707246}，第一个是经度，第二个是纬度"
+              />
+              <el-button 
+                type="primary" 
+                @click="parseIrrigationUnitBatchCoordinates" 
+                style="margin-top: 8px;"
+              >
+                解析坐标
+              </el-button>
+            </div>
             <el-table :data="irrigationUnitForm.fieldRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
               <el-table-column label="纬度" prop="latitude">
@@ -277,7 +307,7 @@
                   <el-input-number 
                     v-model="scope.row.latitude" 
                     :controls="false" 
-                    :precision="6"
+                    :precision="3"
                     style="width: 100%"
                   />
                 </template>
@@ -287,7 +317,7 @@
                   <el-input-number 
                     v-model="scope.row.longitude" 
                     :controls="false" 
-                    :precision="6"
+                    :precision="3"
                     style="width: 100%"
                   />
                 </template>
@@ -324,6 +354,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { Search, Plus, Upload, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
+import { parseCoordinateString } from '@/utils/coordinateParser'
 
 // API基础URL
 const API_BASE_URL = '/api'
@@ -802,6 +833,72 @@ const resetIrrigationUnitLocationInfo = () => {
   irrigationUnitForm.fieldRange = []
 }
 
+// 批量坐标输入
+const batchCoordinates = ref('')
+const batchIrrigationUnitCoordinates = ref('')
+
+// 解析批量输入的坐标点并添加到灌溉单元
+const parseBatchCoordinates = () => {
+  if (!batchCoordinates.value) {
+    ElMessage.warning('请先输入坐标数据')
+    return
+  }
+  
+  const coordinates = parseCoordinateString(batchCoordinates.value)
+  
+  if (coordinates.length === 0) {
+    ElMessage.error('未能解析到有效的坐标点，请检查输入格式')
+    return
+  }
+  
+  // 清空现有坐标点
+  fieldForm.fieldRange = []
+  
+  // 添加解析出的坐标点
+  fieldForm.fieldRange = coordinates
+  
+  ElMessage.success(`成功解析并添加了 ${coordinates.length} 个坐标点`)
+  
+  // 清空输入框
+  batchCoordinates.value = ''
+  
+  // 清除表单验证错误
+  if (formRef.value) {
+    formRef.value.clearValidate('fieldRange')
+  }
+}
+
+// 解析批量输入的坐标点并添加到灌溉单元表单
+const parseIrrigationUnitBatchCoordinates = () => {
+  if (!batchIrrigationUnitCoordinates.value) {
+    ElMessage.warning('请先输入坐标数据')
+    return
+  }
+  
+  const coordinates = parseCoordinateString(batchIrrigationUnitCoordinates.value)
+  
+  if (coordinates.length === 0) {
+    ElMessage.error('未能解析到有效的坐标点，请检查输入格式')
+    return
+  }
+  
+  // 清空现有坐标点
+  irrigationUnitForm.fieldRange = []
+  
+  // 添加解析出的坐标点
+  irrigationUnitForm.fieldRange = coordinates
+  
+  ElMessage.success(`成功解析并添加了 ${coordinates.length} 个坐标点`)
+  
+  // 清空输入框
+  batchIrrigationUnitCoordinates.value = ''
+  
+  // 清除表单验证错误
+  if (irrigationUnitFormRef.value) {
+    irrigationUnitFormRef.value.clearValidate('fieldRange')
+  }
+}
+
 onMounted(() => {
   getFieldList();
 });
@@ -875,6 +972,10 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.batch-input-container {
+  margin-bottom: 15px;
 }
 
 .location-hint {

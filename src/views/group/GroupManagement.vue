@@ -153,6 +153,21 @@
               </div>
               <span class="location-hint">至少需要3个点才能形成有效的范围</span>
             </div>
+            <div class="batch-input-container">
+              <el-input
+                v-model="batchGroupCoordinates"
+                type="textarea"
+                :rows="3"
+                placeholder="请输入批量坐标格式如：{87.29547234,44.21764995},{87.29537416,44.21707246}，第一个是经度，第二个是纬度"
+              />
+              <el-button 
+                type="primary" 
+                @click="parseGroupBatchCoordinates" 
+                style="margin-top: 8px;"
+              >
+                解析坐标
+              </el-button>
+            </div>
             <el-table :data="groupForm.groupRange" border style="width: 100%">
               <el-table-column label="序号" type="index" width="60" />
               <el-table-column label="纬度" prop="latitude">
@@ -160,7 +175,7 @@
                   <el-input-number 
                     v-model="scope.row.latitude" 
                     :controls="false" 
-                    :precision="6"
+                    :precision="3"
                     style="width: 100%"
                   />
                 </template>
@@ -170,7 +185,7 @@
                   <el-input-number 
                     v-model="scope.row.longitude" 
                     :controls="false" 
-                    :precision="6"
+                    :precision="3"
                     style="width: 100%"
                   />
                 </template>
@@ -281,6 +296,7 @@ import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
 import { Search, Plus, Upload, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
+import { parseCoordinateString } from '@/utils/coordinateParser'
 
 // API基础URL
 const API_BASE_URL = '/api'
@@ -680,6 +696,40 @@ const resetGroupLocationInfo = () => {
   groupForm.groupRange = []
 }
 
+// 批量坐标输入
+const batchGroupCoordinates = ref('')
+
+// 解析批量输入的坐标点并添加到分组
+const parseGroupBatchCoordinates = () => {
+  if (!batchGroupCoordinates.value) {
+    ElMessage.warning('请先输入坐标数据')
+    return
+  }
+  
+  const coordinates = parseCoordinateString(batchGroupCoordinates.value)
+  
+  if (coordinates.length === 0) {
+    ElMessage.error('未能解析到有效的坐标点，请检查输入格式')
+    return
+  }
+  
+  // 清空现有坐标点
+  groupForm.groupRange = []
+  
+  // 添加解析出的坐标点
+  groupForm.groupRange = coordinates
+  
+  ElMessage.success(`成功解析并添加了 ${coordinates.length} 个坐标点`)
+  
+  // 清空输入框
+  batchGroupCoordinates.value = ''
+  
+  // 清除表单验证错误
+  if (groupFormRef.value) {
+    groupFormRef.value.clearValidate('groupRange')
+  }
+}
+
 // 上传相关
 const uploadHeaders = computed(() => {
   return {
@@ -818,6 +868,10 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.batch-input-container {
+  margin-bottom: 15px;
 }
 
 .location-hint {
