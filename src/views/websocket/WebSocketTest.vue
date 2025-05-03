@@ -354,6 +354,43 @@
           <li>使用后端WebSocket地址作为连接地址</li>
           <li>连接成功后，可以在Apifox中直接与后端通信</li>
         </ol>
+        
+        <h4>任务数据格式示例</h4>
+        <div class="task-format-example">
+          <p>向后端WebSocket发送添加灌溉任务的JSON格式：</p>
+          <pre>{
+  "type": "saveTask",
+  "data": {
+    "taskId": "任务ID",
+    "fieldId": "地块ID",
+    "fieldUnitIds": ["灌溉单元ID1", "灌溉单元ID2"],
+    "startTime": "2023-06-01 08:00:00",
+    "water": 100,
+    "fertilizerN": 10,
+    "fertilizerP": 20,
+    "fertilizerK": 30
+  }
+}</pre>
+          <p>说明：</p>
+          <ul>
+            <li><code>type</code>: 必须为 "saveTask"，表示保存灌溉任务</li>
+            <li><code>taskId</code>: 任务唯一标识符</li>
+            <li><code>fieldId</code>: 地块ID</li>
+            <li><code>fieldUnitIds</code>: 灌溉单元ID数组</li>
+            <li><code>startTime</code>: 开始时间，格式为 "YYYY-MM-DD HH:MM:SS"</li>
+            <li><code>water</code>: 灌溉水量，单位为立方米</li>
+            <li><code>fertilizerN</code>: 氮肥用量</li>
+            <li><code>fertilizerP</code>: 磷肥用量</li>
+            <li><code>fertilizerK</code>: 钾肥用量</li>
+          </ul>
+          <el-button 
+            type="primary" 
+            size="small" 
+            @click="copyTaskFormat"
+          >
+            复制任务格式
+          </el-button>
+        </div>
       </div>
     </div>
   </div>
@@ -416,8 +453,21 @@ const backendMessagesContainer = ref(null);
 let frontendSocket = null;
 let backendSocket = null;
 
-// 组件挂载时自动连接到前端WebSocket服务器
+// 忽略ResizeObserver循环错误
+const ignoreResizeObserverErrors = () => {
+  const originalError = window.console.error;
+  window.console.error = (...args) => {
+    if (args[0]?.includes?.('ResizeObserver loop') || 
+        args[0]?.toString?.().includes?.('ResizeObserver loop')) {
+      return;
+    }
+    originalError(...args);
+  };
+};
+
+// 在组件挂载时安装错误处理器
 onMounted(() => {
+  ignoreResizeObserverErrors();
   // 加载初始数据
   loadGroupData();
   loadFieldData();
@@ -937,6 +987,30 @@ const copyJson = () => {
       ElMessage.error('复制失败');
     });
 };
+
+// 复制任务格式
+const copyTaskFormat = () => {
+  const taskFormat = {
+    type: "saveTask",
+    data: {
+      taskId: "任务ID",
+      fieldId: "地块ID",
+      fieldUnitIds: ["灌溉单元ID1", "灌溉单元ID2"],
+      startTime: "2023-06-01 08:00:00",
+      water: 100,
+      fertilizerN: 10,
+      fertilizerP: 20,
+      fertilizerK: 30
+    }
+  };
+  
+  navigator.clipboard.writeText(JSON.stringify(taskFormat, null, 2))
+    .then(() => ElMessage.success('任务格式已复制到剪贴板'))
+    .catch(err => {
+      console.error('复制失败:', err);
+      ElMessage.error('复制失败');
+    });
+};
 </script>
 
 <style scoped>
@@ -1164,6 +1238,28 @@ const copyJson = () => {
   border-radius: 3px;
   color: #1890ff;
   font-family: 'Courier New', Courier, monospace;
+}
+
+.task-format-example {
+  background-color: #fff;
+  border-radius: 4px;
+  padding: 15px;
+  border-left: 4px solid #67C23A;
+  margin-top: 10px;
+}
+
+.task-format-example pre {
+  background-color: #f5f7fa;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: 'Courier New', Courier, monospace;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.task-format-example ul {
+  padding-left: 20px;
+  color: #606266;
 }
 
 .empty-message {

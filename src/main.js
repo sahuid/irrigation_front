@@ -51,4 +51,29 @@ app.use(ElementPlus, {
   locale: zhCn
 })
 app.use(router)
+
+// 忽略ResizeObserver循环错误
+const ignoreResizeObserverErrors = () => {
+  const originalError = window.console.error;
+  window.console.error = (...args) => {
+    if (args[0]?.includes?.('ResizeObserver loop') || 
+        args[0]?.toString?.().includes?.('ResizeObserver loop')) {
+      return;
+    }
+    originalError(...args);
+  };
+};
+
+// 安装错误处理器
+ignoreResizeObserverErrors();
+
+// 全局错误处理
+window.addEventListener('error', function(e) {
+  if (e && e.message && e.message.includes('ResizeObserver loop')) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    return false;
+  }
+}, true);
+
 app.mount('#app')
