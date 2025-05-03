@@ -479,6 +479,12 @@
 import { ref, onMounted, onUnmounted, nextTick, computed, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import axios from 'axios';
+import { 
+  connectWebSocket, 
+  disconnectWebSocket, 
+  sendMessage, 
+  resetErrorState
+} from '@/utils/websocketManager';
 
 // 数据选择器相关
 const dataSelectorActiveTab = ref('groups');
@@ -529,8 +535,7 @@ const frontendMessagesContainer = ref(null);
 const backendMessagesContainer = ref(null);
 
 // WebSocket 实例
-let frontendSocket = null;
-let backendSocket = null;
+let backendSocket = null; // 后端WebSocket仍然保留原始实现
 
 // 灌溉任务生成器相关
 const taskForm = reactive({
@@ -545,6 +550,11 @@ const taskForm = reactive({
 });
 
 const availableUnits = ref([]);
+
+// 错误控制相关
+// 删除未使用的变量
+// const wsErrorShown = ref(false); // 添加标记变量，记录是否已经显示了WebSocket错误
+// const lastErrorTime = ref(0); // 记录上次显示错误的时间
 
 // 忽略ResizeObserver循环错误
 const ignoreResizeObserverErrors = () => {
@@ -565,17 +575,21 @@ onMounted(() => {
   loadGroupData();
   loadFieldData();
   
+  // 初始化WebSocket管理服务
+  resetErrorState();
+  
   // 将初始连接延迟一下，避免页面刚加载就显示错误
   setTimeout(() => {
+    // 使用WebSocket管理服务连接到前端WebSocket
     connectToFrontend();
   
-    // 尝试每隔5秒重新连接前端WebSocket
+    // 尝试每隔15秒重新连接前端WebSocket
     const reconnectInterval = setInterval(() => {
       if (!isConnectedFrontend.value) {
         console.log('尝试重新连接到前端WebSocket服务器...');
         connectToFrontend();
       }
-    }, 5000);
+    }, 15000);
     
     // 清理定时器
     onUnmounted(() => {
@@ -646,96 +660,65 @@ const loadFieldData = async () => {
 
 // 连接到前端WebSocket服务器
 const connectToFrontend = () => {
-  try {
-    console.log('尝试连接到前端WebSocket服务器:', frontendWsUrl.value);
-    
-    // 如果之前的连接存在，先关闭
-    if (frontendSocket) {
-      frontendSocket.close();
-      frontendSocket = null;
-    }
-    
-    // 创建WebSocket连接到前端服务器
-    frontendSocket = new WebSocket(frontendWsUrl.value);
-    
-    // 连接成功时
-    frontendSocket.onopen = () => {
-      console.log('成功连接到前端WebSocket服务器');
-      isConnectedFrontend.value = true;
-      ElMessage.success('已连接到前端WebSocket服务器');
-    };
-    
-    // 收到消息时
-    frontendSocket.onmessage = (event) => {
-      console.log('收到前端WebSocket消息:', event.data);
-      try {
-        // 尝试解析为JSON
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'system') {
-          // 系统消息
-          addFrontendMessage('system', JSON.stringify(data.data, null, 2));
-        } else if (data.type === 'history') {
-          // 历史消息
-          data.data.forEach(msg => {
-            addFrontendMessage('history', msg.content);
-          });
-        } else {
-          // 其他消息
-          addFrontendMessage('received', event.data);
-        }
-      } catch (error) {
-        // 普通文本消息
-        addFrontendMessage('received', event.data);
-      }
-    };
-    
-    // 连接错误时
-    frontendSocket.onerror = (error) => {
-      console.error('前端WebSocket连接错误:', error);
-      ElMessage.error('连接到前端WebSocket服务器时出错，请确保服务器已启动');
-      disconnectFromFrontend();
+  // 处理接收到的消息
+  const handleMessage = (message) => {
+    console.log('收到前端WebSocket消息:', message);
+    try {
+      // 尝试解析为JSON
+      const data = JSON.parse(message);
       
-      // 添加错误消息到消息列表
-      addFrontendMessage('system', JSON.stringify({
-        message: '连接到前端WebSocket服务器时出错，请确保服务器已启动',
-        time: new Date().toISOString()
-      }, null, 2));
-    };
-    
-    // 连接关闭时
-    frontendSocket.onclose = (event) => {
-      console.log('前端WebSocket连接关闭, 代码:', event.code, '原因:', event.reason);
-      if (isConnectedFrontend.value) {
-        ElMessage.info('前端WebSocket连接已关闭');
-        
-        // 添加关闭消息到消息列表
-        addFrontendMessage('system', JSON.stringify({
-          message: `连接已关闭 (代码: ${event.code})`,
-          time: new Date().toISOString()
-        }, null, 2));
+      if (data.type === 'system') {
+        // 系统消息
+        addFrontendMessage('system', JSON.stringify(data.data, null, 2));
+      } else if (data.type === 'history') {
+        // 历史消息
+        data.data.forEach(msg => {
+          addFrontendMessage('history', msg.content);
+        });
+      } else {
+        // 其他消息
+        addFrontendMessage('received', message);
       }
-      disconnectFromFrontend();
-    };
-  } catch (error) {
-    console.error('创建前端WebSocket连接时出错:', error);
-    ElMessage.error(`创建前端WebSocket连接时出错: ${error.message}`);
-    
-    // 添加错误消息到消息列表
-    addFrontendMessage('system', JSON.stringify({
-      message: `创建WebSocket连接失败: ${error.message}`,
-      time: new Date().toISOString()
-    }, null, 2));
-  }
+    } catch (error) {
+      // 普通文本消息
+      addFrontendMessage('received', message);
+    }
+  };
+  
+  // 处理状态变化
+  const handleStatusChange = (status) => {
+    isConnectedFrontend.value = status;
+  };
+  
+  // 使用WebSocket管理服务连接
+  connectWebSocket(frontendWsUrl.value, handleMessage, handleStatusChange, true);
 };
 
 // 断开与前端WebSocket服务器的连接
 const disconnectFromFrontend = () => {
-  if (frontendSocket) {
-    frontendSocket.close();
-    frontendSocket = null;
-  }
+  disconnectWebSocket();
   isConnectedFrontend.value = false;
+};
+
+// 发送消息到前端WebSocket服务器
+const sendFrontendMessage = () => {
+  if (!isConnectedFrontend.value || !frontendMessageToSend.value.trim()) return;
+  
+  try {
+    // 使用WebSocket管理服务发送消息
+    if (sendMessage(frontendMessageToSend.value)) {
+      // 添加到消息列表
+      addFrontendMessage('sent', frontendMessageToSend.value);
+      
+      // 清空输入框
+      frontendMessageToSend.value = '';
+    } else {
+      ElMessage.error('发送消息到前端WebSocket服务器时出错');
+    }
+  } catch (error) {
+    console.error('发送前端消息时出错:', error);
+    ElMessage.error('发送消息到前端WebSocket服务器时出错');
+  }
 };
 
 // 连接到后端WebSocket
@@ -857,25 +840,6 @@ const addBackendMessage = (type, content) => {
     });
   } catch (error) {
     console.error('添加后端消息时出错:', error);
-  }
-};
-
-// 发送消息到前端WebSocket服务器
-const sendFrontendMessage = () => {
-  if (!isConnectedFrontend.value || !frontendMessageToSend.value.trim()) return;
-  
-  try {
-    // 发送消息到前端WebSocket服务器
-    frontendSocket.send(frontendMessageToSend.value);
-    
-    // 添加到消息列表
-    addFrontendMessage('sent', frontendMessageToSend.value);
-    
-    // 清空输入框
-    frontendMessageToSend.value = '';
-  } catch (error) {
-    console.error('发送前端消息时出错:', error);
-    ElMessage.error('发送消息到前端WebSocket服务器时出错');
   }
 };
 
@@ -1053,13 +1017,15 @@ const sendJsonToWebSocket = () => {
   }
   
   try {
-    // 发送消息
-    frontendSocket.send(exportedJson.value);
-    
-    // 添加发送的消息到消息列表
-    addFrontendMessage('sent', exportedJson.value);
-    
-    ElMessage.success('已发送JSON数据到WebSocket');
+    // 使用WebSocket管理服务发送消息
+    if (sendMessage(exportedJson.value)) {
+      // 添加发送的消息到消息列表
+      addFrontendMessage('sent', exportedJson.value);
+      
+      ElMessage.success('已发送JSON数据到WebSocket');
+    } else {
+      ElMessage.error('发送JSON数据失败');
+    }
   } catch (error) {
     console.error('发送JSON数据到WebSocket时出错:', error);
     ElMessage.error('发送JSON数据失败');

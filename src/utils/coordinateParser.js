@@ -19,8 +19,12 @@ export function parseCoordinateString(coordinateString) {
     
     // 转换匹配到的坐标点为对象数组
     const coordinates = matches.map(match => {
-      const longitude = parseFloat(match[1].trim());
-      const latitude = parseFloat(match[2].trim());
+      // 使用parseFloat保留原始精度，不进行四舍五入
+      const longitudeStr = match[1].trim();
+      const latitudeStr = match[2].trim();
+      
+      const longitude = parseFloat(longitudeStr);
+      const latitude = parseFloat(latitudeStr);
       
       // 验证坐标有效性
       if (isNaN(longitude) || isNaN(latitude)) {

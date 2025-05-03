@@ -175,7 +175,7 @@
                   <el-input-number 
                     v-model="scope.row.latitude" 
                     :controls="false" 
-                    :precision="3"
+                    :precision="6"
                     style="width: 100%"
                   />
                 </template>
@@ -185,7 +185,7 @@
                   <el-input-number 
                     v-model="scope.row.longitude" 
                     :controls="false" 
-                    :precision="3"
+                    :precision="6"
                     style="width: 100%"
                   />
                 </template>

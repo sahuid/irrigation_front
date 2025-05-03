@@ -703,9 +703,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, onUnmounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
+import { checkServerStatus, resetErrorState } from '@/utils/websocketManager'
 
 // API基础URL
 const API_BASE_URL = '/api'
@@ -1330,14 +1331,17 @@ onMounted(() => {
   loadTaskOptions()
   loadArgumentOptions()
   
-  // 初始检查WebSocket服务器状态
-  checkWsServerStatus()
+  // 初始化WebSocket错误状态
+  resetErrorState()
   
-  // 每30秒自动检查WebSocket服务器状态
+  // 初始检查WebSocket服务器状态
+  checkWsServerStatus(true) // 改为静默检查，避免页面加载就显示错误
+  
+  // 每60秒自动检查WebSocket服务器状态
   wsCheckInterval = setInterval(() => {
     // 静默检查（不显示消息）
     checkWsServerStatus(true)
-  }, 30000)
+  }, 60000)
 })
 
 // 组件销毁时清理定时器
@@ -1401,44 +1405,28 @@ const checkWsServerStatus = async (silent = false) => {
   checkingStatus.value = true
   
   try {
-    // 使用HTTP请求检查WebSocket服务器状态
-    const response = await axios.get(`http://localhost:9001/status`, { timeout: 5000 })
-    
-    if (response.status === 200) {
-      wsConnected.value = true
+    // 使用WebSocket管理服务检查服务器状态
+    await checkServerStatus('http://localhost:9001/status', (status, data) => {
+      wsConnected.value = status
       
-      if (!silent) {
-        ElMessage.success('WebSocket服务器正在运行')
-        
+      if (status && !silent) {
         // 添加系统消息
         addWsMessage('system', JSON.stringify({
           message: 'WebSocket服务器状态检查成功',
-          serverInfo: response.data,
+          serverInfo: data,
+          time: new Date().toISOString()
+        }))
+      } else if (!status && !silent) {
+        // 添加系统消息
+        addWsMessage('system', JSON.stringify({
+          message: '无法连接到WebSocket服务器',
+          solution: '请执行 node websocket-server.js 命令启动服务器',
           time: new Date().toISOString()
         }))
       }
-    } else {
-      wsConnected.value = false
-      
-      if (!silent) {
-        ElMessage.error('WebSocket服务器响应异常')
-      }
-    }
+    }, silent)
   } catch (error) {
-    wsConnected.value = false
-    
-    if (!silent) {
-      ElMessage.error('无法连接到WebSocket服务器，请确保服务器已启动')
-      console.error('WebSocket服务器检查错误:', error)
-      
-      // 添加系统消息
-      addWsMessage('system', JSON.stringify({
-        message: '无法连接到WebSocket服务器',
-        error: error.message,
-        solution: '请执行 node websocket-server.js 命令启动服务器',
-        time: new Date().toISOString()
-      }))
-    }
+    console.error('WebSocket服务器检查出错:', error)
   } finally {
     checkingStatus.value = false
   }
