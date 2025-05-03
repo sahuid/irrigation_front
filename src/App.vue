@@ -39,10 +39,6 @@
             <el-icon><Calendar /></el-icon>
             <span>调度方案</span>
           </el-menu-item>
-          <el-menu-item index="/monitor" class="menu-item">
-            <el-icon><VideoPlay /></el-icon>
-            <span>实时监控</span>
-          </el-menu-item>
           <el-menu-item index="/websocket" class="menu-item">
             <el-icon><Connection /></el-icon>
             <span>WebSocket 测试</span>
@@ -96,8 +92,7 @@ import {
   Timer, 
   Monitor, 
   Connection, 
-  Calendar, 
-  VideoPlay,
+  Calendar,
   FolderOpened,  // 导入文件夹图标
   Setting  // 导入设置图标
 } from '@element-plus/icons-vue'
@@ -131,7 +126,6 @@ const getCurrentPageName = () => {
     '/device': '设备管理',
     '/argument': '灌溉参数',
     '/schedule': '调度方案',
-    '/monitor': '实时监控',
     '/websocket': 'WebSocket 测试'
   }
   return routeMap[route.path] || '首页'

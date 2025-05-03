@@ -5,7 +5,6 @@ import DeviceManagement from '../views/device/DeviceManagement.vue'
 import GroupManagement from '../views/group/GroupManagement.vue'
 import WebSocketTest from '../views/websocket/WebSocketTest.vue'
 import ScheduleView from '../views/schedule/ScheduleView.vue'
-import MonitorView from '../views/monitor/MonitorView.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import ArgumentManagement from '../views/argument/ArgumentManagement.vue'
 
@@ -55,12 +54,6 @@ const routes = [
     path: '/schedule',
     name: 'Schedule',
     component: ScheduleView,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/monitor',
-    name: 'Monitor',
-    component: MonitorView,
     meta: { requiresAuth: true }
   },
   {
