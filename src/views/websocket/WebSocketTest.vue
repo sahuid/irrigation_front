@@ -191,6 +191,85 @@
               </div>
             </div>
           </el-tab-pane>
+          
+          <el-tab-pane label="灌溉任务生成器" name="taskGenerator">
+            <div class="task-generator">
+              <h4>创建灌溉任务</h4>
+              <el-form :model="taskForm" label-width="120px">
+                <el-form-item label="任务ID">
+                  <el-input v-model="taskForm.taskId" placeholder="任务ID将自动生成">
+                    <template #append>
+                      <el-button @click="generateTaskId">生成ID</el-button>
+                    </template>
+                  </el-input>
+                </el-form-item>
+                
+                <el-form-item label="选择地块">
+                  <el-select 
+                    v-model="taskForm.fieldId" 
+                    placeholder="请选择地块"
+                    filterable
+                    @change="handleFieldChange"
+                  >
+                    <el-option
+                      v-for="field in fields"
+                      :key="field.id"
+                      :label="`${field.fieldName || ''} (${field.fieldId || 'ID无'})`"
+                      :value="field.id"
+                    />
+                  </el-select>
+                </el-form-item>
+                
+                <el-form-item label="选择灌溉单元">
+                  <el-select 
+                    v-model="taskForm.fieldUnitIds" 
+                    placeholder="请选择灌溉单元"
+                    multiple
+                    :disabled="!taskForm.fieldId || !availableUnits.length"
+                  >
+                    <el-option
+                      v-for="unit in availableUnits"
+                      :key="unit.id"
+                      :label="`${unit.fieldName || ''} (${unit.fieldUnitId || 'ID无'})`"
+                      :value="unit.id"
+                    />
+                  </el-select>
+                </el-form-item>
+                
+                <el-form-item label="开始时间">
+                  <el-date-picker
+                    v-model="taskForm.startTime"
+                    type="datetime"
+                    placeholder="选择开始时间"
+                    format="YYYY-MM-DD HH:mm:ss"
+                  />
+                </el-form-item>
+                
+                <el-divider />
+                
+                <el-form-item label="灌溉水量(m³)">
+                  <el-input-number v-model="taskForm.water" :min="0" :step="10" :precision="0" />
+                </el-form-item>
+                
+                <el-form-item label="氮肥用量(kg)">
+                  <el-input-number v-model="taskForm.fertilizerN" :min="0" :precision="1" />
+                </el-form-item>
+                
+                <el-form-item label="磷肥用量(kg)">
+                  <el-input-number v-model="taskForm.fertilizerP" :min="0" :precision="1" />
+                </el-form-item>
+                
+                <el-form-item label="钾肥用量(kg)">
+                  <el-input-number v-model="taskForm.fertilizerK" :min="0" :precision="1" />
+                </el-form-item>
+                
+                <el-form-item>
+                  <el-button type="primary" @click="generateTaskJson">生成任务JSON</el-button>
+                  <el-button @click="resetTaskForm">重置表单</el-button>
+                </el-form-item>
+              </el-form>
+            </div>
+          </el-tab-pane>
         </el-tabs>
         
         <div v-if="exportedJson" class="json-preview">
@@ -397,7 +476,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import axios from 'axios';
 
@@ -452,6 +531,20 @@ const backendMessagesContainer = ref(null);
 // WebSocket 实例
 let frontendSocket = null;
 let backendSocket = null;
+
+// 灌溉任务生成器相关
+const taskForm = reactive({
+  taskId: `TASK_${Date.now()}`,
+  fieldId: '',
+  fieldUnitIds: [],
+  startTime: new Date(),
+  water: 100,
+  fertilizerN: 10,
+  fertilizerP: 20,
+  fertilizerK: 30
+});
+
+const availableUnits = ref([]);
 
 // 忽略ResizeObserver循环错误
 const ignoreResizeObserverErrors = () => {
@@ -1011,6 +1104,91 @@ const copyTaskFormat = () => {
       ElMessage.error('复制失败');
     });
 };
+
+// 生成任务ID
+const generateTaskId = () => {
+  taskForm.taskId = `TASK_${Date.now()}`;
+};
+
+// 处理地块变化
+const handleFieldChange = (fieldId) => {
+  // 清空已选灌溉单元
+  taskForm.fieldUnitIds = [];
+  
+  if (!fieldId) {
+    availableUnits.value = [];
+    return;
+  }
+  
+  // 查找选中的地块
+  const selectedField = fields.value.find(field => field.id === fieldId);
+  
+  if (selectedField && selectedField.subField && selectedField.subField.length > 0) {
+    // 使用子地块作为灌溉单元
+    availableUnits.value = selectedField.subField;
+  } else {
+    availableUnits.value = [];
+    ElMessage.warning('该地块没有关联的灌溉单元');
+  }
+};
+
+// 生成任务JSON
+const generateTaskJson = () => {
+  if (!taskForm.fieldId) {
+    ElMessage.warning('请选择地块');
+    return;
+  }
+  
+  if (!taskForm.fieldUnitIds || taskForm.fieldUnitIds.length === 0) {
+    ElMessage.warning('请选择至少一个灌溉单元');
+    return;
+  }
+  
+  // 格式化开始时间
+  const formattedStartTime = taskForm.startTime 
+    ? new Date(taskForm.startTime).toISOString().replace('T', ' ').substr(0, 19)
+    : '';
+  
+  // 创建任务JSON
+  const taskJson = {
+    type: 'saveTask',
+    data: {
+      taskId: taskForm.taskId,
+      fieldId: taskForm.fieldId,
+      fieldUnitIds: taskForm.fieldUnitIds,
+      startTime: formattedStartTime,
+      water: taskForm.water,
+      fertilizerN: taskForm.fertilizerN,
+      fertilizerP: taskForm.fertilizerP,
+      fertilizerK: taskForm.fertilizerK
+    }
+  };
+  
+  // 将任务JSON设置为导出的JSON
+  exportedJson.value = JSON.stringify(taskJson, null, 2);
+  
+  // 将任务JSON设置到后端消息框中
+  backendMessageToSend.value = JSON.stringify(taskJson, null, 2);
+  
+  // 切换到后端消息选项卡
+  sendTabActive.value = 'backend';
+  
+  ElMessage.success('已生成灌溉任务JSON');
+};
+
+// 重置任务表单
+const resetTaskForm = () => {
+  taskForm.taskId = `TASK_${Date.now()}`;
+  taskForm.fieldId = '';
+  taskForm.fieldUnitIds = [];
+  taskForm.startTime = new Date();
+  taskForm.water = 100;
+  taskForm.fertilizerN = 10;
+  taskForm.fertilizerP = 20;
+  taskForm.fertilizerK = 30;
+  
+  availableUnits.value = [];
+};
 </script>
 
 <style scoped>
@@ -1316,5 +1494,39 @@ h2, h3, h4 {
 .preview-actions {
   display: flex;
   gap: 10px;
+}
+
+.task-generator {
+  padding: 15px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+}
+
+.task-generator h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #409EFF;
+}
+
+.task-generator .el-form {
+  margin-bottom: 15px;
+}
+
+.task-generator .el-form-item {
+  margin-bottom: 10px;
+}
+
+.task-generator .el-form-item label {
+  font-weight: bold;
+  color: #606266;
+}
+
+.task-generator .el-form-item .el-input,
+.task-generator .el-form-item .el-select {
+  width: 100%;
+}
+
+.task-generator .el-form-item .el-button {
+  margin-left: 10px;
 }
 </style> 

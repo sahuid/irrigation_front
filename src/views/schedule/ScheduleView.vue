@@ -13,87 +13,78 @@
       
       <el-divider />
       
-      <!-- 添加WebSocket连接状态和操作区域 -->
+      <!-- WebSocket连接区域 -->
       <div class="websocket-section">
         <div class="websocket-header">
           <h3>调度方案实时发送 (WebSocket)</h3>
           <div class="websocket-status">
             <span class="status-label">连接状态：</span>
-            <el-tag :type="isConnected ? 'success' : 'danger'">
-              {{ isConnected ? '已连接' : '未连接' }}
+            <el-tag :type="wsConnected ? 'success' : 'danger'">
+              {{ wsConnected ? '已连接' : '未连接' }}
             </el-tag>
           </div>
         </div>
         
-        <div class="websocket-content">
-          <div class="websocket-config">
-            <el-form inline>
-              <el-form-item label="WebSocket地址">
-                <el-input 
-                  v-model="wsUrl" 
-                  placeholder="例如: ws://localhost:9000/api/accept"
-                  style="width: 300px"
-                  :disabled="isConnected"
-                />
-              </el-form-item>
-              <el-form-item>
-                <el-button 
-                  type="primary" 
-                  @click="connectToWebSocket" 
-                  :disabled="isConnected || !wsUrl"
-                  :loading="isConnecting"
-                >
-                  连接
-                </el-button>
-                <el-button 
-                  type="danger" 
-                  @click="disconnectFromWebSocket" 
-                  :disabled="!isConnected"
-                >
-                  断开连接
-                </el-button>
-              </el-form-item>
-            </el-form>
+        <div class="websocket-control">
+          <div class="control-row">
+            <div class="websocket-url">
+              <span class="url-label">WebSocket服务器地址：</span>
+              <el-input 
+                v-model="frontendWsUrl" 
+                placeholder="前端WebSocket服务器地址，例如: ws://localhost:9001" 
+                :disabled="true"
+              >
+                <template #append>
+                  <el-button @click="copyWsUrl">复制</el-button>
+                </template>
+              </el-input>
+              <p class="ws-note">
+                <i class="el-icon-info"></i> 
+                可使用Apifox连接到此地址，实时接收调度方案数据
+              </p>
+            </div>
           </div>
           
-          <div class="websocket-actions" v-if="scheduleResult">
-            <el-button 
-              type="success" 
-              @click="sendScheduleToWebSocket" 
-              :disabled="!isConnected"
-            >
-              发送调度方案到后端
+          <div class="control-row">
+            <div class="ws-actions">
+              <el-button 
+                type="primary" 
+                @click="checkWsServerStatus"
+                :loading="checkingStatus"
+              >
+                检查服务器状态
+              </el-button>
+              <el-button 
+                type="success" 
+                @click="sendScheduleData"
+                :disabled="!scheduleResult || !wsConnected"
+              >
+                发送调度方案
+              </el-button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 消息历史区域 -->
+        <div class="message-history" v-if="wsMessages.length > 0 || hasScheduleResult">
+          <div class="history-header">
+            <h4>消息历史</h4>
+            <el-button type="info" size="small" @click="clearWsMessages">
+              清空历史
             </el-button>
           </div>
           
-          <!-- 添加WebSocket消息历史区域 -->
-          <div class="websocket-messages">
-            <div class="messages-header">
-              <h4>WebSocket 消息历史</h4>
-              <el-button 
-                type="info" 
-                size="small" 
-                @click="clearMessages"
-                :disabled="messages.length === 0"
-              >
-                清空消息
-              </el-button>
-            </div>
-            <div class="messages-container" ref="messagesContainer">
-              <div 
-                v-for="(msg, index) in messages" 
-                :key="index" 
-                :class="['message-item', msg.type]"
-              >
-                <div class="message-header">
-                  <span class="message-type">{{ msg.type === 'sent' ? '已发送' : '已接收' }}</span>
-                  <span class="message-time">{{ msg.time }}</span>
-                </div>
-                <pre class="message-content">{{ msg.content }}</pre>
+          <div class="messages-container" ref="messagesContainer">
+            <div 
+              v-for="(msg, index) in wsMessages" 
+              :key="index" 
+              :class="['message-item', msg.type]"
+            >
+              <div class="message-header">
+                <span class="message-type">{{ msg.type === 'sent' ? '发送' : '接收' }}</span>
+                <span class="message-time">{{ msg.time }}</span>
               </div>
-              <div v-if="messages.length === 0" class="empty-message">
-                暂无消息
-              </div>
+              <pre class="message-content">{{ msg.content }}</pre>
             </div>
           </div>
         </div>
@@ -712,8 +703,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, onUnmounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted, watch, onUnmounted, nextTick, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 
 // API基础URL
@@ -1323,198 +1314,188 @@ const generateDifferentialFlowControl = async () => {
 }
 
 // WebSocket相关
-const wsUrl = ref('ws://localhost:9000/api/accept'); // 默认WebSocket地址
-const isConnected = ref(false);
-const isConnecting = ref(false);
-let webSocket = null; // WebSocket实例
-const messages = ref([]); // 消息历史
-const messagesContainer = ref(null); // 消息容器引用
+const frontendWsUrl = ref('ws://localhost:9001')
+const wsConnected = ref(false)
+const wsMessages = ref([])
+const messagesContainer = ref(null)
+const checkingStatus = ref(false)
+const hasScheduleResult = computed(() => scheduleResult.value !== null)
 
-// 连接到WebSocket
-const connectToWebSocket = async () => {
-  if (isConnected.value || !wsUrl.value) return;
-  
-  try {
-    isConnecting.value = true;
-    
-    // 连接到WebSocket
-    webSocket = new WebSocket(wsUrl.value);
-    
-    // 监听连接打开
-    webSocket.onopen = () => {
-      isConnected.value = true;
-      ElMessage.success('已成功连接到后端WebSocket');
-      
-      // 添加系统消息
-      addMessage('system', {
-        message: '已成功连接到后端WebSocket',
-        time: new Date().toISOString()
-      });
-    };
-    
-    // 监听消息
-    webSocket.onmessage = (event) => {
-      const message = event.data;
-      console.log('收到WebSocket消息:', message);
-      
-      // 添加接收到的消息
-      addMessage('received', message);
-      
-      // 显示简短提示
-      ElMessage.info('收到后端消息');
-    };
-    
-    // 监听连接错误
-    webSocket.onerror = (error) => {
-      console.error('WebSocket连接错误:', error);
-      ElMessage.error('连接到WebSocket时出错');
-      
-      // 添加错误消息
-      addMessage('system', {
-        message: '连接出错',
-        error: error.toString(),
-        time: new Date().toISOString()
-      });
-      
-      disconnectFromWebSocket();
-    };
-    
-    // 监听连接关闭
-    webSocket.onclose = () => {
-      if (isConnected.value) {
-        ElMessage.info('WebSocket连接已关闭');
-        
-        // 添加关闭消息
-        addMessage('system', {
-          message: '连接已关闭',
-          time: new Date().toISOString()
-        });
-        
-        disconnectFromWebSocket();
-      }
-    };
-  } catch (error) {
-    console.error('创建WebSocket连接时出错:', error);
-    ElMessage.error(`创建WebSocket连接时出错: ${error.message}`);
-    
-    // 添加错误消息
-    addMessage('system', {
-      message: `创建连接失败: ${error.message}`,
-      time: new Date().toISOString()
-    });
-    
-    disconnectFromWebSocket();
-  } finally {
-    isConnecting.value = false;
-  }
-};
+let wsCheckInterval = null
 
-// 断开WebSocket连接
-const disconnectFromWebSocket = () => {
-  if (webSocket) {
-    webSocket.close();
-    webSocket = null;
-  }
-  isConnected.value = false;
-};
-
-// 添加消息到历史记录
-const addMessage = (type, content) => {
-  try {
-    // 尝试格式化JSON
-    let formattedContent = content;
-    if (typeof content === 'string') {
-      try {
-        const parsedContent = JSON.parse(content);
-        formattedContent = JSON.stringify(parsedContent, null, 2);
-      } catch (e) {
-        // 如果不是JSON保持原样
-        formattedContent = content;
-      }
-    } else {
-      formattedContent = JSON.stringify(content, null, 2);
-    }
-    
-    messages.value.push({
-      type, // 'sent', 'received', 'system'
-      content: formattedContent,
-      time: new Date().toLocaleTimeString()
-    });
-    
-    // 滚动到最新消息
-    nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-      }
-    });
-  } catch (error) {
-    console.error('添加消息时出错:', error);
-  }
-};
-
-// 清空消息历史
-const clearMessages = () => {
-  messages.value = [];
-};
-
-// 发送调度方案到WebSocket
-const sendScheduleToWebSocket = () => {
-  if (!isConnected.value || !scheduleResult.value) {
-    ElMessage.warning('未连接WebSocket或没有调度方案数据');
-    return;
-  }
-  
-  try {
-    let data;
-    try {
-      // 尝试解析调度方案（可能已经是JSON字符串）
-      data = typeof scheduleResult.value === 'string' 
-        ? JSON.parse(scheduleResult.value) 
-        : scheduleResult.value;
-    } catch (e) {
-      // 如果解析失败，直接使用原始数据
-      data = scheduleResult.value;
-    }
-    
-    // 创建要发送的数据对象
-    const messageObj = {
-      type: 'schedule',
-      data: data,
-      timestamp: new Date().toISOString()
-    };
-    
-    // 转换为JSON字符串并发送
-    const message = JSON.stringify(messageObj);
-    webSocket.send(message);
-    
-    // 添加发送的消息到消息历史
-    addMessage('sent', message);
-    
-    ElMessage.success('已发送调度方案到后端');
-  } catch (error) {
-    console.error('发送数据到WebSocket时出错:', error);
-    ElMessage.error('发送数据失败: ' + error.message);
-    
-    // 添加错误消息
-    addMessage('system', {
-      message: `发送失败: ${error.message}`,
-      time: new Date().toISOString()
-    });
-  }
-};
-
-// 组件卸载时断开连接
-onUnmounted(() => {
-  disconnectFromWebSocket();
-});
-
-// 页面加载时获取数据
+// 在组件挂载时检查WebSocket服务器状态
 onMounted(() => {
   loadFieldOptions()
   loadGroupOptions()
   loadTaskOptions()
   loadArgumentOptions()
+  
+  // 初始检查WebSocket服务器状态
+  checkWsServerStatus()
+  
+  // 每30秒自动检查WebSocket服务器状态
+  wsCheckInterval = setInterval(() => {
+    // 静默检查（不显示消息）
+    checkWsServerStatus(true)
+  }, 30000)
 })
+
+// 组件销毁时清理定时器
+onUnmounted(() => {
+  if (wsCheckInterval) {
+    clearInterval(wsCheckInterval)
+  }
+})
+
+// 复制WebSocket URL
+const copyWsUrl = () => {
+  navigator.clipboard.writeText(frontendWsUrl.value)
+    .then(() => {
+      ElMessage.success('WebSocket地址已复制到剪贴板')
+    })
+    .catch(err => {
+      console.error('复制失败:', err)
+      ElMessage.error('复制失败，请手动复制')
+    })
+}
+
+// 添加消息到历史
+const addWsMessage = (type, content) => {
+  try {
+    // 尝试格式化JSON
+    if (typeof content === 'string') {
+      try {
+        const formattedContent = JSON.parse(content)
+        content = JSON.stringify(formattedContent, null, 2)
+      } catch (e) {
+        // 如果不是JSON则保持原样
+      }
+    }
+    
+    wsMessages.value.push({
+      type, // 'sent', 'received', 'system'
+      content,
+      time: new Date().toLocaleTimeString()
+    })
+    
+    // 滚动到最新消息
+    nextTick(() => {
+      if (messagesContainer.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      }
+    })
+  } catch (error) {
+    console.error('添加WebSocket消息时出错:', error)
+  }
+}
+
+// 清空消息历史
+const clearWsMessages = () => {
+  wsMessages.value = []
+}
+
+// 检查WebSocket服务器状态
+const checkWsServerStatus = async (silent = false) => {
+  if (checkingStatus.value) return
+  
+  checkingStatus.value = true
+  
+  try {
+    // 使用HTTP请求检查WebSocket服务器状态
+    const response = await axios.get(`http://localhost:9001/status`, { timeout: 5000 })
+    
+    if (response.status === 200) {
+      wsConnected.value = true
+      
+      if (!silent) {
+        ElMessage.success('WebSocket服务器正在运行')
+        
+        // 添加系统消息
+        addWsMessage('system', JSON.stringify({
+          message: 'WebSocket服务器状态检查成功',
+          serverInfo: response.data,
+          time: new Date().toISOString()
+        }))
+      }
+    } else {
+      wsConnected.value = false
+      
+      if (!silent) {
+        ElMessage.error('WebSocket服务器响应异常')
+      }
+    }
+  } catch (error) {
+    wsConnected.value = false
+    
+    if (!silent) {
+      ElMessage.error('无法连接到WebSocket服务器，请确保服务器已启动')
+      console.error('WebSocket服务器检查错误:', error)
+      
+      // 添加系统消息
+      addWsMessage('system', JSON.stringify({
+        message: '无法连接到WebSocket服务器',
+        error: error.message,
+        solution: '请执行 node websocket-server.js 命令启动服务器',
+        time: new Date().toISOString()
+      }))
+    }
+  } finally {
+    checkingStatus.value = false
+  }
+}
+
+// 发送调度方案数据
+const sendScheduleData = async () => {
+  if (!scheduleResult.value) {
+    ElMessage.warning('没有可发送的调度方案数据')
+    return
+  }
+  
+  if (!wsConnected.value) {
+    const tryConnect = await ElMessageBox.confirm(
+      'WebSocket服务器可能未运行，是否尝试发送？',
+      '连接警告',
+      {
+        confirmButtonText: '尝试发送',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).catch(() => false)
+    
+    if (!tryConnect) return
+  }
+  
+  try {
+    // 构造要发送的数据
+    const messageData = {
+      type: 'scheduleData',
+      data: scheduleResult.value,
+      timestamp: new Date().toISOString()
+    }
+    
+    // 发送HTTP请求到WebSocket服务器，由服务器广播消息给所有连接的客户端
+    const response = await axios.post('http://localhost:9001/broadcast', messageData)
+    
+    if (response.status === 200) {
+      ElMessage.success('调度方案已发送到WebSocket服务器')
+      
+      // 添加发送消息到历史
+      addWsMessage('sent', JSON.stringify(messageData))
+    } else {
+      ElMessage.error('发送失败: ' + (response.data.message || '未知错误'))
+    }
+  } catch (error) {
+    console.error('发送调度方案数据时出错:', error)
+    ElMessage.error('发送调度方案数据失败: ' + error.message)
+    
+    // 添加错误消息
+    addWsMessage('system', JSON.stringify({
+      message: '发送调度方案数据失败',
+      error: error.message,
+      time: new Date().toISOString()
+    }))
+  }
+}
 </script>
 
 <style scoped>
@@ -1795,10 +1776,11 @@ onMounted(() => {
 }
 
 .websocket-section {
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  padding: 15px;
   margin-bottom: 20px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding: 15px;
+  border: 1px solid #e4e7ed;
 }
 
 .websocket-header {
@@ -1811,86 +1793,98 @@ onMounted(() => {
 .websocket-header h3 {
   margin: 0;
   color: #409EFF;
-  font-size: 16px;
 }
 
 .websocket-status {
   display: flex;
   align-items: center;
-  gap: 10px;
 }
 
 .status-label {
+  margin-right: 8px;
   font-weight: bold;
 }
 
-.websocket-content {
+.websocket-control {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  margin-bottom: 15px;
 }
 
-.websocket-config {
-  background-color: #fff;
-  border-radius: 4px;
-  padding: 15px;
-}
-
-.websocket-actions {
+.control-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
 }
 
-/* 添加WebSocket消息历史样式 */
-.websocket-messages {
+.websocket-url {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.url-label {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.ws-note {
+  font-size: 12px;
+  color: #606266;
+  margin: 5px 0 0 0;
+}
+
+.ws-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.message-history {
   margin-top: 15px;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
-  background-color: #fff;
 }
 
-.messages-header {
+.history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 10px 15px;
-  border-bottom: 1px solid #e4e7ed;
   background-color: #f5f7fa;
+  border-bottom: 1px solid #e4e7ed;
 }
 
-.messages-header h4 {
+.history-header h4 {
   margin: 0;
-  font-size: 14px;
   color: #606266;
 }
 
 .messages-container {
-  height: 300px;
+  max-height: 300px;
   overflow-y: auto;
   padding: 10px;
 }
 
 .message-item {
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   padding: 10px;
   border-radius: 4px;
-  background-color: #f8f9fa;
+  background-color: #fff;
   border-left: 4px solid #409EFF;
 }
 
 .message-item.sent {
   border-left-color: #67C23A;
-  background-color: #f0f9eb;
 }
 
 .message-item.received {
   border-left-color: #E6A23C;
-  background-color: #fdf6ec;
 }
 
 .message-item.system {
-  border-left-color: #909399;
-  background-color: #f4f4f5;
+  border-left-color: #F56C6C;
 }
 
 .message-header {
@@ -1901,10 +1895,6 @@ onMounted(() => {
   color: #909399;
 }
 
-.message-type {
-  font-weight: bold;
-}
-
 .message-content {
   margin: 0;
   white-space: pre-wrap;
@@ -1912,14 +1902,5 @@ onMounted(() => {
   font-size: 13px;
   color: #303133;
   overflow-x: auto;
-}
-
-.empty-message {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100px;
-  color: #909399;
-  font-style: italic;
 }
 </style> 
