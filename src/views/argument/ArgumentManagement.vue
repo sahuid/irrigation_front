@@ -381,8 +381,8 @@ const submitArgumentForm = async () => {
         let response
         
         if (isEdit.value) {
-          // 编辑参数
-          response = await axios.put(`${API_BASE_URL}/argument/update`, argumentForm)
+          // 编辑参数 - 修改为POST请求，与后端接口匹配
+          response = await axios.post(`${API_BASE_URL}/argument/update`, argumentForm)
         } else {
           // 添加参数
           response = await axios.post(`${API_BASE_URL}/argument/add`, argumentForm)
