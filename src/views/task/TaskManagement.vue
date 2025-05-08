@@ -11,20 +11,72 @@
           @input="handleSearch"
           style="width: 300px;"
         />
-        <el-button type="primary" @click="handleAddTask" icon="Plus">新增任务</el-button>
+        <div class="action-buttons">
+          <el-button type="primary" @click="handleAddTask" icon="Plus">新增任务</el-button>
+          <el-button type="success" @click="handleAddDiffTask" icon="Plus">新增差异性任务</el-button>
+        </div>
+      </div>
+      
+      <div class="type-filter">
+        <span class="filter-label">任务类型：</span>
+        <el-radio-group v-model="taskTypeFilter" size="small" @change="handleTypeFilterChange">
+          <el-radio-button label="all">全部</el-radio-button>
+          <el-radio-button label="normal">整体性任务</el-radio-button>
+          <el-radio-button label="diff">差异性任务</el-radio-button>
+        </el-radio-group>
       </div>
       
       <el-table 
-        :data="taskList" 
+        :data="filteredTaskList" 
         border 
         style="width: 100%" 
         v-loading="loading"
         :header-cell-style="{background:'#f5f7fa', color:'#606266'}"
         row-key="id"
         stripe
+        @expand-change="handleExpandChange"
       >
+        <el-table-column type="expand" width="50">
+          <template #default="{ row }">
+            <div v-if="row.type === 1 && loadingDiffListTaskIds.includes(row.id)" class="loading-diff-params">
+              <el-skeleton :rows="3" animated />
+            </div>
+            <div v-else-if="row.type === 1 && row.diffList && row.diffList.length > 0" class="expanded-diff-params">
+              <h4 class="expanded-diff-title">灌溉单元参数列表</h4>
+              <el-table
+                :data="row.diffList"
+                border
+                size="small"
+                style="width: 100%"
+              >
+                <el-table-column prop="fieldUnitId" label="灌溉单元编号" width="150" />
+                <el-table-column prop="water" label="水量(m³)" width="120" />
+                <el-table-column prop="fertilizerN" label="氮肥(kg)" width="120" />
+                <el-table-column prop="fertilizerP" label="磷肥(kg)" width="120" />
+                <el-table-column prop="fertilizerK" label="钾肥(kg)" width="120" />
+              </el-table>
+            </div>
+            <div v-else-if="row.type === 1" class="no-diff-params">
+              <el-empty description="暂无灌溉单元参数" :image-size="60" />
+            </div>
+            <div v-else class="not-diff-task">
+              <div class="info-message">整体性任务无需查看灌溉单元参数</div>
+            </div>
+          </template>
+        </el-table-column>
+        
         <el-table-column prop="taskId" label="任务编号" width="120" />
         <el-table-column prop="fieldId" label="地块编号" width="120" />
+        <el-table-column label="任务类型" width="120">
+          <template #default="scope">
+            <el-tag 
+              :type="scope.row.type === 1 ? 'success' : 'primary'" 
+              effect="plain"
+            >
+              {{ scope.row.type === 1 ? '差异性任务' : '整体性任务' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="灌溉单元编号" width="150">
           <template #default="scope">
             <el-tooltip 
@@ -45,22 +97,22 @@
         </el-table-column>
         <el-table-column prop="water" label="水量(m³)" width="100">
           <template #default="scope">
-            {{ scope.row.water }}
+            {{ scope.row.type === 1 ? '-' : scope.row.water }}
           </template>
         </el-table-column>
         <el-table-column prop="fertilizerN" label="氮肥(kg)" width="100">
           <template #default="scope">
-            {{ scope.row.fertilizerN }}
+            {{ scope.row.type === 1 ? '-' : scope.row.fertilizerN }}
           </template>
         </el-table-column>
         <el-table-column prop="fertilizerP" label="磷肥(kg)" width="100">
           <template #default="scope">
-            {{ scope.row.fertilizerP }}
+            {{ scope.row.type === 1 ? '-' : scope.row.fertilizerP }}
           </template>
         </el-table-column>
         <el-table-column prop="fertilizerK" label="钾肥(kg)" width="100">
           <template #default="scope">
-            {{ scope.row.fertilizerK }}
+            {{ scope.row.type === 1 ? '-' : scope.row.fertilizerK }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
@@ -68,6 +120,15 @@
             <el-button type="primary" size="small" @click="handleEdit(scope.row)" icon="Edit">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(scope.row)" icon="Delete">删除</el-button>
             <el-button type="success" size="small" @click="handleToGroup(scope.row)" icon="SetUp">一键分组</el-button>
+            <el-button 
+              v-if="scope.row.type === 1" 
+              type="warning" 
+              size="small" 
+              @click="handleSetUnitParams(scope.row)" 
+              icon="Setting"
+            >
+              设置单元参数
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -165,18 +226,30 @@
             />
           </el-config-provider>
         </el-form-item>
-        <el-form-item label="水量(m³)" prop="water">
-          <el-input-number v-model="taskForm.water" :min="0" :precision="2" style="width: 100%"></el-input-number>
-        </el-form-item>
-        <el-form-item label="氮肥(kg)" prop="fertilizerN">
-          <el-input-number v-model="taskForm.fertilizerN" :min="0" :precision="2" style="width: 100%"></el-input-number>
-        </el-form-item>
-        <el-form-item label="磷肥(kg)" prop="fertilizerP">
-          <el-input-number v-model="taskForm.fertilizerP" :min="0" :precision="2" style="width: 100%"></el-input-number>
-        </el-form-item>
-        <el-form-item label="钾肥(kg)" prop="fertilizerK">
-          <el-input-number v-model="taskForm.fertilizerK" :min="0" :precision="2" style="width: 100%"></el-input-number>
-        </el-form-item>
+        <!-- 仅在整体性任务表单中显示肥料和水量字段 -->
+        <template v-if="!taskForm.isDiff">
+          <el-form-item label="水量(m³)" prop="water">
+            <el-input-number v-model="taskForm.water" :min="0" :precision="2" style="width: 100%"></el-input-number>
+          </el-form-item>
+          <el-form-item label="氮肥(kg)" prop="fertilizerN">
+            <el-input-number v-model="taskForm.fertilizerN" :min="0" :precision="2" style="width: 100%"></el-input-number>
+          </el-form-item>
+          <el-form-item label="磷肥(kg)" prop="fertilizerP">
+            <el-input-number v-model="taskForm.fertilizerP" :min="0" :precision="2" style="width: 100%"></el-input-number>
+          </el-form-item>
+          <el-form-item label="钾肥(kg)" prop="fertilizerK">
+            <el-input-number v-model="taskForm.fertilizerK" :min="0" :precision="2" style="width: 100%"></el-input-number>
+          </el-form-item>
+        </template>
+        <div v-else class="form-info-message">
+          <el-alert
+            title="差异性任务无需设置肥料与水量参数"
+            type="info"
+            :closable="false"
+            show-icon
+            description="差异性任务将根据实际情况智能分配灌溉参数"
+          />
+        </div>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -215,11 +288,110 @@
         </span>
       </template>
     </el-dialog>
+    
+    <!-- 设置灌溉单元参数对话框 -->
+    <el-dialog
+      v-model="unitParamsDialogVisible"
+      title="设置差异性任务灌溉单元参数"
+      width="700px"
+      destroy-on-close
+    >
+      <div v-if="currentTask" class="task-info">
+        <p>任务编号: <strong>{{ currentTask.taskId }}</strong></p>
+        <p>地块编号: <strong>{{ currentTask.fieldId }}</strong></p>
+      </div>
+      
+      <!-- 调试信息 -->
+      <div class="debug-info" style="margin: 10px 0; padding: 10px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; color: #666;">
+        <p>灌溉单元数量: {{ unitParamsList.length }}</p>
+        <p>当前选择: {{ selectedUnitId || '未选择' }}</p>
+      </div>
+      
+      <div class="unit-params-form" v-loading="unitParamsListLoading">
+        <el-form label-width="120px">
+          <el-form-item label="选择灌溉单元">
+            <el-select 
+              v-model="selectedUnitId" 
+              placeholder="请选择灌溉单元" 
+              style="width: 100%"
+              @change="handleUnitChange"
+              :loading="unitParamsListLoading"
+              :disabled="unitParamsListLoading || unitParamsList.length === 0"
+            >
+              <el-option 
+                v-for="param in unitParamsList" 
+                :key="param.fieldUnitId" 
+                :label="param.fieldUnitId" 
+                :value="param.fieldUnitId" 
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        
+        <div v-if="selectedUnitId" class="unit-params">
+          <h3 class="unit-params-title">灌溉单元 {{ selectedUnitId }} 参数设置</h3>
+          <el-form label-width="120px">
+            <el-form-item label="水量(m³)">
+              <el-input-number 
+                v-model="currentUnitParams.water" 
+                :min="0" 
+                :precision="2" 
+                style="width: 100%"
+              ></el-input-number>
+            </el-form-item>
+            <el-form-item label="氮肥(kg)">
+              <el-input-number 
+                v-model="currentUnitParams.fertilizerN" 
+                :min="0" 
+                :precision="2" 
+                style="width: 100%"
+              ></el-input-number>
+            </el-form-item>
+            <el-form-item label="磷肥(kg)">
+              <el-input-number 
+                v-model="currentUnitParams.fertilizerP" 
+                :min="0" 
+                :precision="2" 
+                style="width: 100%"
+              ></el-input-number>
+            </el-form-item>
+            <el-form-item label="钾肥(kg)">
+              <el-input-number 
+                v-model="currentUnitParams.fertilizerK" 
+                :min="0" 
+                :precision="2" 
+                style="width: 100%"
+              ></el-input-number>
+            </el-form-item>
+          </el-form>
+        </div>
+        
+        <!-- 无数据提示 -->
+        <el-empty 
+          v-if="!unitParamsListLoading && unitParamsList.length === 0" 
+          description="未找到灌溉单元数据" 
+        />
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="unitParamsDialogVisible = false">取消</el-button>
+          <el-button 
+            type="primary" 
+            @click="submitUnitParams" 
+            :loading="unitParamsSubmitLoading"
+            :disabled="unitParamsList.length === 0"
+          >
+            保存参数
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
@@ -239,6 +411,27 @@ const total = ref(0)
 
 // 搜索和筛选
 const searchKeyword = ref('')
+const taskTypeFilter = ref('all') // 任务类型筛选，默认显示全部
+
+// 筛选后的任务列表
+const filteredTaskList = computed(() => {
+  // 如果没有选择筛选类型，返回所有数据
+  if (taskTypeFilter.value === 'all') {
+    return taskList.value;
+  }
+  
+  // 筛选整体性任务 (type=0)
+  if (taskTypeFilter.value === 'normal') {
+    return taskList.value.filter(task => task.type === 0 || task.type === undefined);
+  }
+  
+  // 筛选差异性任务 (type=1)
+  if (taskTypeFilter.value === 'diff') {
+    return taskList.value.filter(task => task.type === 1);
+  }
+  
+  return taskList.value;
+});
 
 // 地块选项
 const fieldOptions = ref([])
@@ -270,8 +463,27 @@ const taskForm = reactive({
   water: 0,
   fertilizerN: 0,
   fertilizerP: 0,
+  fertilizerK: 0,
+  isDiff: false // 是否是差异性任务
+})
+
+// 单元参数相关变量
+const unitParamsDialogVisible = ref(false)
+const unitParamsList = ref([])
+const unitParamsListLoading = ref(false)
+const unitParamsSubmitLoading = ref(false)
+const selectedUnitId = ref('') // 当前选择的灌溉单元ID
+const currentUnitParams = reactive({
+  fieldUnitId: '',
+  taskId: '',
+  water: 0,
+  fertilizerN: 0,
+  fertilizerP: 0,
   fertilizerK: 0
 })
+
+// 用于追踪正在加载diffList的任务ID
+const loadingDiffListTaskIds = ref([]);
 
 // 表单验证规则
 const rules = {
@@ -279,10 +491,55 @@ const rules = {
   fieldId: [{ required: true, message: '请选择地块编号', trigger: 'change' }],
   fieldUnitIds: [{ required: true, message: '请选择灌溉单元', trigger: 'change' }],
   startTimeDate: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
-  water: [{ required: true, message: '请输入水量', trigger: 'blur' }],
-  fertilizerN: [{ required: true, message: '请输入氮肥量', trigger: 'blur' }],
-  fertilizerP: [{ required: true, message: '请输入磷肥量', trigger: 'blur' }],
-  fertilizerK: [{ required: true, message: '请输入钾肥量', trigger: 'blur' }]
+  water: [{ 
+    required: true, 
+    message: '请输入水量', 
+    trigger: 'blur',
+    validator: (rule, value, callback) => {
+      // 只有当不是差异性任务时才验证
+      if (!taskForm.isDiff && (value === null || value === undefined || value === '')) {
+        callback(new Error('请输入水量'));
+      } else {
+        callback();
+      }
+    }
+  }],
+  fertilizerN: [{ 
+    required: true, 
+    message: '请输入氮肥量', 
+    trigger: 'blur',
+    validator: (rule, value, callback) => {
+      if (!taskForm.isDiff && (value === null || value === undefined || value === '')) {
+        callback(new Error('请输入氮肥量'));
+      } else {
+        callback();
+      }
+    }
+  }],
+  fertilizerP: [{ 
+    required: true, 
+    message: '请输入磷肥量', 
+    trigger: 'blur',
+    validator: (rule, value, callback) => {
+      if (!taskForm.isDiff && (value === null || value === undefined || value === '')) {
+        callback(new Error('请输入磷肥量'));
+      } else {
+        callback();
+      }
+    }
+  }],
+  fertilizerK: [{ 
+    required: true, 
+    message: '请输入钾肥量', 
+    trigger: 'blur',
+    validator: (rule, value, callback) => {
+      if (!taskForm.isDiff && (value === null || value === undefined || value === '')) {
+        callback(new Error('请输入钾肥量'));
+      } else {
+        callback();
+      }
+    }
+  }]
 }
 
 // 日期选择器快捷选项
@@ -373,13 +630,55 @@ const processTaskData = (tasks) => {
     // 处理灌溉单元字段，确保是数组格式
     if (!task.fieldUnitIds) {
       if (task.fieldUnitId) {
-        task.fieldUnitIds = [task.fieldUnitId];
+        // 将单个fieldUnitId转为数组
+        if (typeof task.fieldUnitId === 'string') {
+          try {
+            // 尝试解析JSON字符串
+            const parsed = JSON.parse(task.fieldUnitId);
+            if (Array.isArray(parsed)) {
+              task.fieldUnitIds = parsed;
+            } else {
+              task.fieldUnitIds = [task.fieldUnitId];
+            }
+          } catch (e) {
+            // 如果不是JSON格式，考虑是否是逗号分隔的字符串
+            if (task.fieldUnitId.includes(',')) {
+              task.fieldUnitIds = task.fieldUnitId.split(',').map(id => id.trim());
+            } else {
+              task.fieldUnitIds = [task.fieldUnitId];
+            }
+          }
+        } else {
+          task.fieldUnitIds = [task.fieldUnitId];
+        }
       } else {
         task.fieldUnitIds = [];
       }
     } else if (typeof task.fieldUnitIds === 'string') {
-      // 如果后端返回的是字符串格式(如逗号分隔的字符串)，转为数组
-      task.fieldUnitIds = task.fieldUnitIds.split(',').map(id => id.trim());
+      try {
+        // 尝试解析JSON字符串格式，如 ["test11","test12","123"]
+        const parsed = JSON.parse(task.fieldUnitIds);
+        if (Array.isArray(parsed)) {
+          task.fieldUnitIds = parsed;
+        } else {
+          // 如果是逗号分隔的字符串
+          task.fieldUnitIds = task.fieldUnitIds.split(',').map(id => id.trim());
+        }
+      } catch (e) {
+        // 如果解析失败，视为逗号分隔的字符串
+        task.fieldUnitIds = task.fieldUnitIds.split(',').map(id => id.trim());
+      }
+    }
+    
+    // 处理diffList，确保即使为空也有一个数组
+    if (!task.diffList) {
+      task.diffList = [];
+    }
+    
+    // 对于差异性任务，如果没有diffList数据，可以尝试加载
+    if (task.type === 1 && task.diffList.length === 0) {
+      // 这里可以考虑添加一个标志，表示此任务的diffList需要加载
+      task.diffListNeedsLoading = true;
     }
     
     return task;
@@ -390,21 +689,41 @@ const processTaskData = (tasks) => {
 const getTaskList = async () => {
   loading.value = true;
   try {
-    const response = await axios.get(`${API_BASE_URL}/task/query/page`, {
-      params: {
-        page: currentPage.value,
-        pageSize: pageSize.value,
-        keyword: searchKeyword.value || undefined
-      }
-    });
+    const params = {
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      keyword: searchKeyword.value || undefined
+    };
+    
+    // 添加任务类型筛选
+    if (taskTypeFilter.value === 'normal') {
+      params.type = 0; // 整体性任务
+    } else if (taskTypeFilter.value === 'diff') {
+      params.type = 1; // 差异性任务
+    }
+    
+    const response = await axios.get(`${API_BASE_URL}/task/query/page`, { params });
+    
     if (response.data && response.data.code === 200) {
       console.log('API原始数据:', response.data);
-      // 打印第一条记录的开始时间，以便检查格式
+      
+      // 打印第一条记录，以便检查数据结构
       if (response.data.value.records && response.data.value.records.length > 0) {
-        console.log('第一条记录的开始时间:', response.data.value.records[0].startTime);
+        console.log('数据样例:', response.data.value.records[0]);
       }
+      
+      // 处理任务数据
       taskList.value = processTaskData(response.data.value.records || []);
       total.value = response.data.value.total || 0;
+      
+      // 按任务类型排序：整体性任务在前，差异性任务在后
+      taskList.value.sort((a, b) => {
+        // 如果type不存在，默认为整体性任务(0)
+        const typeA = a.type === undefined ? 0 : a.type;
+        const typeB = b.type === undefined ? 0 : b.type;
+        return typeA - typeB; // 升序排列：0(整体性)在前，1(差异性)在后
+      });
+      
     } else {
       ElMessage.error(response.data?.msg || '获取任务列表失败');
     }
@@ -510,6 +829,39 @@ const handleAddTask = () => {
   taskForm.taskId = ''
   taskForm.fieldId = ''
   taskForm.fieldUnitIds = []
+  taskForm.isDiff = false // 设置为整体性任务
+  
+  // 设置当前时间作为默认开始时间
+  const now = new Date()
+  const timeStr = now.toISOString().slice(0, 19).replace('T', ' ')
+  taskForm.startTimeDate = timeStr
+  taskForm.startTime = timeStr
+  
+  taskForm.water = 0
+  taskForm.fertilizerN = 0
+  taskForm.fertilizerP = 0
+  taskForm.fertilizerK = 0
+  
+  // 确保已加载地块列表
+  if (fieldOptions.value.length === 0) {
+    loadFieldOptions()
+  }
+  
+  // 清空灌溉单元列表
+  fieldUnitOptions.value = []
+  
+  dialogVisible.value = true
+}
+
+// 新增差异性任务
+const handleAddDiffTask = () => {
+  dialogTitle.value = '新增差异性任务'
+  isEdit.value = false
+  taskForm.id = ''
+  taskForm.taskId = ''
+  taskForm.fieldId = ''
+  taskForm.fieldUnitIds = []
+  taskForm.isDiff = true // 设置为差异性任务
   
   // 设置当前时间作为默认开始时间
   const now = new Date()
@@ -539,6 +891,9 @@ const handleEdit = (row) => {
   isEdit.value = true
   taskForm.id = row.id
   taskForm.taskId = row.taskId
+  
+  // 根据任务类型设置是否为差异性任务
+  taskForm.isDiff = row.type === 1
   
   // 确保已加载地块列表
   if (fieldOptions.value.length === 0) {
@@ -599,10 +954,21 @@ const handleEdit = (row) => {
   }
   
   taskForm.startTime = taskForm.startTimeDate
-  taskForm.water = row.water
-  taskForm.fertilizerN = row.fertilizerN
-  taskForm.fertilizerP = row.fertilizerP
-  taskForm.fertilizerK = row.fertilizerK
+  
+  // 只有整体性任务才设置水量和肥料参数
+  if (!taskForm.isDiff) {
+    taskForm.water = row.water
+    taskForm.fertilizerN = row.fertilizerN
+    taskForm.fertilizerP = row.fertilizerP
+    taskForm.fertilizerK = row.fertilizerK
+  } else {
+    // 差异性任务设置默认值
+    taskForm.water = 0
+    taskForm.fertilizerN = 0
+    taskForm.fertilizerP = 0
+    taskForm.fertilizerK = 0
+  }
+  
   dialogVisible.value = true
 }
 
@@ -671,30 +1037,36 @@ const submitForm = async () => {
         taskForm.startTimeDate = backendFormat;
         
         let response
+        // 构建基础提交数据
         const submitData = {
           id: taskForm.id,
           taskId: taskForm.taskId,
           fieldId: taskForm.fieldId, // 直接使用地块编号字符串
           fieldUnitIds: taskForm.fieldUnitIds,
-          startTime: backendFormat,
-          water: taskForm.water,
-          fertilizerN: taskForm.fertilizerN,
-          fertilizerP: taskForm.fertilizerP,
-          fertilizerK: taskForm.fertilizerK
+          startTime: backendFormat
         }
         
-        console.log('最终提交的日期时间:', submitData.startTime);
+        // 如果不是差异性任务，添加水量和肥料相关字段
+        if (!taskForm.isDiff) {
+          submitData.water = taskForm.water
+          submitData.fertilizerN = taskForm.fertilizerN
+          submitData.fertilizerP = taskForm.fertilizerP
+          submitData.fertilizerK = taskForm.fertilizerK
+        }
+        
+        console.log('最终提交的数据:', submitData);
         
         if (taskForm.id) {
           // 编辑 - 使用 /task/update 接口
           response = await axios.put(`${API_BASE_URL}/task/update`, submitData)
         } else {
-          // 新增 - 使用新的接口路径
-          response = await axios.post(`${API_BASE_URL}/task/add`, submitData)
+          // 根据是否是差异性任务选择不同的接口
+          const apiUrl = taskForm.isDiff ? `${API_BASE_URL}/task/add/diff` : `${API_BASE_URL}/task/add`;
+          response = await axios.post(apiUrl, submitData)
         }
         
         if (response.data.code === 200) {
-          ElMessage.success(taskForm.id ? '编辑成功' : '添加成功')
+          ElMessage.success(taskForm.id ? '编辑成功' : (taskForm.isDiff ? '添加差异性任务成功' : '添加任务成功'))
           dialogVisible.value = false
           getTaskList()
         } else {
@@ -777,6 +1149,227 @@ const submitGroupForm = async () => {
     groupSubmitLoading.value = false;
   }
 }
+
+// 处理任务类型筛选变化
+const handleTypeFilterChange = () => {
+  getTaskList()
+}
+
+// 设置灌溉单元参数
+const handleSetUnitParams = (row) => {
+  console.log('原始任务数据:', row);
+  
+  // 保存当前任务信息
+  currentTask.value = {...row};
+  
+  // 初始化单元参数列表
+  unitParamsList.value = [];
+  
+  // 清空当前选择
+  selectedUnitId.value = '';
+  
+  // 显示对话框
+  unitParamsDialogVisible.value = true;
+  
+  // 从后端获取灌溉单元列表
+  loadTaskFieldUnits(row.id);
+}
+
+// 从后端加载任务的灌溉单元列表
+const loadTaskFieldUnits = async (taskId) => {
+  try {
+    // 显示加载状态
+    unitParamsListLoading.value = true;
+    
+    console.log('请求灌溉单元列表, 任务ID:', taskId);
+    
+    const response = await axios.get(`${API_BASE_URL}/task/get/unit`, {
+      params: { taskId }
+    });
+    
+    if (response.data && response.data.code === 200) {
+      console.log('获取到灌溉单元列表:', response.data.value);
+      
+      // 处理接收到的灌溉单元列表
+      const fieldUnits = response.data.value || [];
+      
+      // 为每个灌溉单元创建参数对象
+      unitParamsList.value = fieldUnits.map(unitId => ({
+        fieldUnitId: String(unitId).trim(),
+        taskId: currentTask.value.id,
+        water: 0,
+        fertilizerN: 0,
+        fertilizerP: 0,
+        fertilizerK: 0
+      }));
+      
+      console.log('创建的参数列表:', unitParamsList.value);
+    } else {
+      ElMessage.error(response.data?.msg || '获取灌溉单元列表失败');
+      console.error('API返回错误:', response.data);
+    }
+  } catch (error) {
+    console.error('获取灌溉单元列表出错:', error);
+    ElMessage.error('网络错误，请稍后重试');
+  } finally {
+    unitParamsListLoading.value = false;
+  }
+}
+
+// 处理灌溉单元选择变化
+const handleUnitChange = (unitId) => {
+  console.log('选择的灌溉单元ID:', unitId);
+  
+  // 查找当前单元的参数，如果不存在则创建一个新的
+  let params = unitParamsList.value.find(item => item.fieldUnitId === unitId);
+  
+  if (!params) {
+    console.log('未找到该单元的参数，创建新参数');
+    params = {
+      fieldUnitId: unitId,
+      taskId: currentTask.value.id,
+      water: 0,
+      fertilizerN: 0,
+      fertilizerP: 0,
+      fertilizerK: 0
+    };
+    unitParamsList.value.push(params);
+  } else {
+    console.log('找到已有参数:', params);
+  }
+  
+  // 更新当前单元参数
+  currentUnitParams.fieldUnitId = params.fieldUnitId;
+  currentUnitParams.taskId = params.taskId;
+  currentUnitParams.water = params.water;
+  currentUnitParams.fertilizerN = params.fertilizerN;
+  currentUnitParams.fertilizerP = params.fertilizerP;
+  currentUnitParams.fertilizerK = params.fertilizerK;
+  
+  console.log('当前单元参数已更新:', currentUnitParams);
+}
+
+// 提交单位参数
+const submitUnitParams = async () => {
+  if (!currentTask.value) return;
+  
+  // 如果当前有选择的单元，先保存当前参数到列表中
+  if (selectedUnitId.value) {
+    const index = unitParamsList.value.findIndex(item => item.fieldUnitId === selectedUnitId.value);
+    if (index !== -1) {
+      unitParamsList.value[index] = {
+        fieldUnitId: selectedUnitId.value,
+        taskId: currentTask.value.id,
+        water: currentUnitParams.water,
+        fertilizerN: currentUnitParams.fertilizerN,
+        fertilizerP: currentUnitParams.fertilizerP,
+        fertilizerK: currentUnitParams.fertilizerK
+      };
+    }
+  }
+  
+  unitParamsSubmitLoading.value = true;
+  
+  try {
+    // 检查是否有参数
+    if (unitParamsList.value.length === 0) {
+      ElMessage.warning('没有可保存的灌溉单元参数');
+      unitParamsSubmitLoading.value = false;
+      return;
+    }
+    
+    // 构造单个提交对象，直接使用当前选择的单元参数
+    if (!selectedUnitId.value) {
+      ElMessage.warning('请先选择一个灌溉单元');
+      unitParamsSubmitLoading.value = false;
+      return;
+    }
+    
+    // 获取当前选择的单元参数
+    const selectedParam = unitParamsList.value.find(p => p.fieldUnitId === selectedUnitId.value);
+    
+    if (!selectedParam) {
+      ElMessage.warning('未找到选择的灌溉单元参数');
+      unitParamsSubmitLoading.value = false;
+      return;
+    }
+    
+    // 按照后端需要的格式构造数据
+    const submitData = {
+      taskId: currentTask.value.id,
+      fieldUnitId: selectedParam.fieldUnitId,
+      water: selectedParam.water,
+      fertilizerN: selectedParam.fertilizerN,
+      fertilizerP: selectedParam.fertilizerP,
+      fertilizerK: selectedParam.fertilizerK
+    };
+    
+    console.log('提交的单元参数:', submitData);
+    
+    // 发送请求保存参数
+    const response = await axios.post(`${API_BASE_URL}/task/set/fieldUnit`, submitData);
+    
+    if (response.data && response.data.code === 200) {
+      ElMessage.success('保存灌溉单元参数成功');
+      unitParamsDialogVisible.value = false;
+    } else {
+      ElMessage.error(response.data?.msg || '保存参数失败');
+    }
+  } catch (error) {
+    console.error('保存灌溉单元参数出错:', error);
+    ElMessage.error('网络错误，请稍后重试');
+  } finally {
+    unitParamsSubmitLoading.value = false;
+  }
+}
+
+// 加载差异性任务的灌溉单元参数
+const loadTaskDiffList = async (taskId) => {
+  // 避免重复加载
+  if (loadingDiffListTaskIds.value.includes(taskId)) {
+    return;
+  }
+  
+  loadingDiffListTaskIds.value.push(taskId);
+  
+  try {
+    console.log('加载差异性任务灌溉单元参数, 任务ID:', taskId);
+    
+    // 从后端获取数据
+    const response = await axios.get(`${API_BASE_URL}/task/get/diffs`, {
+      params: { taskId }
+    });
+    
+    if (response.data && response.data.code === 200) {
+      const diffList = response.data.value || [];
+      console.log('获取到灌溉单元参数列表:', diffList);
+      
+      // 更新任务的diffList
+      const taskIndex = taskList.value.findIndex(task => task.id === taskId);
+      if (taskIndex !== -1) {
+        taskList.value[taskIndex].diffList = diffList;
+        taskList.value[taskIndex].diffListNeedsLoading = false;
+      }
+    } else {
+      console.error('获取灌溉单元参数失败:', response.data);
+    }
+  } catch (error) {
+    console.error('加载灌溉单元参数出错:', error);
+  } finally {
+    // 从加载列表中移除
+    const index = loadingDiffListTaskIds.value.indexOf(taskId);
+    if (index !== -1) {
+      loadingDiffListTaskIds.value.splice(index, 1);
+    }
+  }
+};
+
+// 监听表格展开操作
+const handleExpandChange = (row, expanded) => {
+  if (expanded && row.type === 1 && row.diffListNeedsLoading) {
+    loadTaskDiffList(row.id);
+  }
+};
 </script>
 
 <style scoped>
@@ -796,6 +1389,19 @@ const submitGroupForm = async () => {
   justify-content: space-between;
   gap: 15px;
   margin-bottom: 20px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.type-filter {
+  margin-bottom: 20px;
+}
+
+.filter-label {
+  margin-right: 10px;
 }
 
 .pagination {
@@ -828,5 +1434,95 @@ const submitGroupForm = async () => {
   display: flex;
   flex-wrap: wrap;
   margin-bottom: 10px;
+}
+
+/* 表单信息提示样式 */
+.form-info-message {
+  margin: 10px 0 20px;
+}
+
+:deep(.form-info-message .el-alert) {
+  padding: 12px 15px;
+}
+
+:deep(.form-info-message .el-alert__description) {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #606266;
+}
+
+/* 任务信息样式 */
+.task-info {
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  padding: 12px 15px;
+  margin-bottom: 20px;
+  border-left: 4px solid #409EFF;
+}
+
+.task-info p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.task-info strong {
+  font-weight: 600;
+  color: #303133;
+}
+
+/* 单元参数表单样式 */
+.unit-params-form {
+  margin-top: 20px;
+}
+
+.unit-params {
+  margin-top: 20px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 15px;
+  border-left: 4px solid #67c23a;
+}
+
+.unit-params-title {
+  font-size: 16px;
+  margin: 0 0 15px 0;
+  color: #303133;
+  font-weight: 500;
+}
+
+/* 展开行样式 */
+.expanded-diff-params {
+  padding: 15px;
+  background-color: #f9f9f9;
+}
+
+.expanded-diff-title {
+  margin: 0 0 15px 0;
+  font-size: 15px;
+  color: #303133;
+  font-weight: 500;
+}
+
+.no-diff-params {
+  padding: 20px;
+  text-align: center;
+}
+
+.not-diff-task {
+  padding: 15px;
+  text-align: center;
+}
+
+.info-message {
+  padding: 10px;
+  background-color: #f0f9eb;
+  border-radius: 4px;
+  color: #67c23a;
+  font-size: 14px;
+}
+
+/* 加载中样式 */
+.loading-diff-params {
+  padding: 20px;
 }
 </style> 

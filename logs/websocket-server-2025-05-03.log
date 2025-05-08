@@ -125,3 +125,7 @@
 [2025-05-03T05:59:02.866Z] [INFO] 消息已通过HTTP API广播: {"type":"scheduleData","data":"{\"fieldId\":\"test1\",\"dateTime\":\"2025-05-02 14:15:54\",\"taskId\":28,\"scheduleData\":{\"groupId\":11,\"taps\":\"[test, test2]\",\"pump\":\"test12\",\"fertilizer_Ap...
 [2025-05-03T05:59:45.129Z] [INFO] HTTP请求: GET /status 来自 ::1
 [2025-05-03T06:00:45.134Z] [INFO] HTTP请求: GET /status 来自 ::1
+[2025-05-03T06:01:45.142Z] [INFO] HTTP请求: GET /status 来自 ::1
+[2025-05-03T06:02:45.140Z] [INFO] HTTP请求: GET /status 来自 ::1
+[2025-05-03T06:03:21.014Z] [INFO] 客户端 ::1 (ID: ma7tbckiu47v1) 已断开连接，代码: 1001，原因: 
+[2025-05-03T06:03:21.015Z] [INFO] 客户端已移除，当前客户端数量: 0
