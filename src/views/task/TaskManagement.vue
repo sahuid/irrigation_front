@@ -54,6 +54,18 @@
                 <el-table-column prop="fertilizerN" label="氮肥(kg)" width="120" />
                 <el-table-column prop="fertilizerP" label="磷肥(kg)" width="120" />
                 <el-table-column prop="fertilizerK" label="钾肥(kg)" width="120" />
+                <el-table-column label="操作" width="100">
+                  <template #default="scope">
+                    <el-button 
+                      type="primary" 
+                      size="small" 
+                      @click="handleEditUnitParam(row, scope.row)" 
+                      icon="Edit"
+                    >
+                      编辑
+                    </el-button>
+                  </template>
+                </el-table-column>
               </el-table>
             </div>
             <div v-else-if="row.type === 1" class="no-diff-params">
@@ -1283,11 +1295,24 @@ const submitUnitParams = async () => {
       fertilizerK: selectedParam.fertilizerK
     };
     
-    const response = await axios.post(`${API_BASE_URL}/task/set/fieldUnit`, submitData);
+    // 判断是新增还是更新
+    let response;
+    if (currentTask.value.diffList && currentTask.value.diffList.some(diff => diff.fieldUnitId === selectedParam.fieldUnitId)) {
+      // 已存在的参数，使用更新接口
+      response = await axios.post(`${API_BASE_URL}/task/diff/update`, submitData);
+    } else {
+      // 新参数，使用设置接口
+      response = await axios.post(`${API_BASE_URL}/task/set/fieldUnit`, submitData);
+    }
     
     if (response.data?.code === 200) {
       ElMessage.success('保存灌溉单元参数成功');
       unitParamsDialogVisible.value = false;
+      
+      // 刷新任务列表中的diffList数据
+      if (currentTask.value.id) {
+        loadTaskDiffList(currentTask.value.id);
+      }
     } else {
       ElMessage.error(response.data?.msg || '保存参数失败');
     }
@@ -1358,6 +1383,29 @@ const calculateTotalForTask = (task, paramName) => {
   return task.diffList.reduce((sum, unit) => {
     return sum + (parseFloat(unit[paramName]) || 0);
   }, 0).toFixed(2);
+};
+
+// 编辑灌溉单元参数
+const handleEditUnitParam = (task, unitParam) => {
+  // 设置当前任务
+  currentTask.value = task;
+  
+  // 加载该任务的灌溉单元列表
+  loadTaskFieldUnits(task.id).then(() => {
+    // 选择对应的灌溉单元
+    selectedUnitId.value = unitParam.fieldUnitId;
+    
+    // 设置参数值
+    currentUnitParams.fieldUnitId = unitParam.fieldUnitId;
+    currentUnitParams.taskId = task.id;
+    currentUnitParams.water = unitParam.water;
+    currentUnitParams.fertilizerN = unitParam.fertilizerN;
+    currentUnitParams.fertilizerP = unitParam.fertilizerP;
+    currentUnitParams.fertilizerK = unitParam.fertilizerK;
+    
+    // 打开对话框
+    unitParamsDialogVisible.value = true;
+  });
 };
 </script>
 

@@ -13,6 +13,26 @@
       
       <el-divider />
       
+      <!-- 当前调度方案参数 -->
+      <div v-if="currentScheduleParams" class="current-params-section">
+        <div class="params-header">
+          <h3>当前调度方案参数</h3>
+        </div>
+        <div class="params-content">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="方案类型">{{ currentScheduleParams.type }}</el-descriptions-item>
+            <el-descriptions-item label="地块">{{ currentScheduleParams.fieldId }}</el-descriptions-item>
+            <el-descriptions-item label="分组">{{ currentScheduleParams.groupId }}</el-descriptions-item>
+            <el-descriptions-item label="任务">{{ currentScheduleParams.taskId }}</el-descriptions-item>
+            <el-descriptions-item label="灌溉参数">{{ currentScheduleParams.argumentId }}</el-descriptions-item>
+            <el-descriptions-item label="肥料类型">{{ currentScheduleParams.fertilizerType }}</el-descriptions-item>
+            <el-descriptions-item label="施肥顺序" :span="2">{{ currentScheduleParams.sortType }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
+      
+      <el-divider v-if="currentScheduleParams" />
+      
       <!-- WebSocket连接区域 -->
       <div class="websocket-section">
         <div class="websocket-header">
@@ -1016,6 +1036,18 @@ const generateSchedule = async () => {
           scheduleResult.value = response.data.value
           ElMessage.success('调度方案生成成功')
           dialogVisible.value = false
+          
+          // 记录生成的调度方案参数
+          saveScheduleParams({
+            type: '整体性调度方案',
+            fieldId: getFieldNameById(scheduleForm.fieldId),
+            groupId: getGroupNameById(scheduleForm.groupId),
+            taskId: getTaskNameById(scheduleForm.taskId),
+            argumentId: getArgumentInfoById(scheduleForm.argumentId),
+            fertilizerType: scheduleForm.fertilizerType === 1 ? '顺序肥' : '混合肥',
+            sortType: scheduleForm.fertilizerType === 1 ? 
+              fertilizersOrder.value.map(item => item.label).join(' → ') : '混合施肥'
+          })
         } else {
           ElMessage.error(response.data.msg || '生成调度方案失败')
         }
@@ -1111,6 +1143,23 @@ const generateDifferentialSchedule = async () => {
           scheduleResult.value = response.data.value
           ElMessage.success('差异性调度方案生成成功')
           differentialDialogVisible.value = false
+          
+          // 记录生成的调度方案参数
+          saveScheduleParams({
+            type: '差异性调度方案',
+            fieldId: getFieldNameById(differentialForm.fieldId),
+            groupId: getGroupNameById(differentialForm.groupId),
+            taskId: getTaskNameById(differentialForm.taskId),
+            argumentId: getArgumentInfoById(differentialForm.argumentId),
+            fertilizerType: differentialForm.fertilizerType === 1 ? '顺序肥' : '混合肥',
+            sortType: differentialForm.fertilizerType === 1 ? 
+              differentialFertilizersOrder.value.map(item => item.label).join(' → ') : '混合施肥'
+          })
+          
+          // 如果是差异性任务，保存差异性灌溉单元参数
+          if (differentialForm.taskId) {
+            await updateDifferentialParams(differentialForm.taskId);
+          }
         } else {
           ElMessage.error(response.data.msg || '生成差异性调度方案失败')
         }
@@ -1123,6 +1172,34 @@ const generateDifferentialSchedule = async () => {
     }
   })
 }
+
+// 更新差异性灌溉单元参数
+const updateDifferentialParams = async (taskId) => {
+  try {
+    // 获取当前任务的差异性参数
+    const selectedTask = taskOptions.value.find(t => t.id === taskId);
+    if (!selectedTask || selectedTask.type !== 1) {
+      return; // 不是差异性任务，不需要更新
+    }
+    
+    // 构造差异性参数对象
+    const diffParams = {
+      taskId: taskId,
+      // 这里可以添加其他需要更新的差异性参数
+    };
+    
+    // 调用更新差异性参数的API
+    const response = await axios.post(`${API_BASE_URL}/task/diff/update`, diffParams);
+    
+    if (response.data.code === 200) {
+      console.log('差异性灌溉单元参数更新成功');
+    } else {
+      console.error('更新差异性灌溉单元参数失败:', response.data.msg);
+    }
+  } catch (error) {
+    console.error('更新差异性灌溉单元参数出错:', error);
+  }
+};
 
 // 打开整体性流量控制对话框
 const openFlowControlDialog = async () => {
@@ -1289,6 +1366,18 @@ const generateFlowControl = async () => {
           scheduleResult.value = response.data.value
           ElMessage.success('整体性流量控制生成成功')
           flowControlDialogVisible.value = false
+          
+          // 记录生成的调度方案参数
+          saveScheduleParams({
+            type: '整体性流量控制',
+            fieldId: getFieldNameById(flowControlForm.fieldId),
+            groupId: getGroupNameById(flowControlForm.groupId),
+            taskId: getTaskNameById(flowControlForm.taskId),
+            argumentId: getArgumentInfoById(flowControlForm.argumentId),
+            fertilizerType: flowControlForm.fertilizerType === 1 ? '顺序肥' : '混合肥',
+            sortType: flowControlForm.fertilizerType === 1 ? 
+              flowControlFertilizersOrder.value.map(item => item.label).join(' → ') : '混合施肥'
+          })
         } else {
           ElMessage.error(response.data.msg || '生成整体性流量控制失败')
         }
@@ -1333,6 +1422,18 @@ const generateDifferentialFlowControl = async () => {
           scheduleResult.value = response.data.value
           ElMessage.success('差异性流量控制生成成功')
           differentialFlowControlDialogVisible.value = false
+          
+          // 记录生成的调度方案参数
+          saveScheduleParams({
+            type: '差异性流量控制',
+            fieldId: getFieldNameById(differentialFlowControlForm.fieldId),
+            groupId: getGroupNameById(differentialFlowControlForm.groupId),
+            taskId: getTaskNameById(differentialFlowControlForm.taskId),
+            argumentId: getArgumentInfoById(differentialFlowControlForm.argumentId),
+            fertilizerType: differentialFlowControlForm.fertilizerType === 1 ? '顺序肥' : '混合肥',
+            sortType: differentialFlowControlForm.fertilizerType === 1 ? 
+              differentialFlowControlFertilizersOrder.value.map(item => item.label).join(' → ') : '混合施肥'
+          })
         } else {
           ElMessage.error(response.data.msg || '生成差异性流量控制失败')
         }
@@ -1515,6 +1616,38 @@ const sendScheduleData = async () => {
       time: new Date().toISOString()
     }))
   }
+}
+
+// 调度方案参数
+const currentScheduleParams = ref(null)
+
+// 保存当前调度方案参数
+const saveScheduleParams = (params) => {
+  currentScheduleParams.value = params
+}
+
+// 根据ID获取地块名称
+const getFieldNameById = (id) => {
+  const field = fieldOptions.value.find(f => f.id === id)
+  return field ? field.fieldId : id
+}
+
+// 根据ID获取分组名称
+const getGroupNameById = (id) => {
+  const group = groupOptions.value.find(g => g.id === id)
+  return group ? group.groupName : id
+}
+
+// 根据ID获取任务名称
+const getTaskNameById = (id) => {
+  const task = taskOptions.value.find(t => t.id === id)
+  return task ? task.taskId : id
+}
+
+// 根据ID获取灌溉参数信息
+const getArgumentInfoById = (id) => {
+  const arg = argumentOptions.value.find(a => a.id === id)
+  return arg ? `水肥比(${arg.water_and_fertilizer}:1) 流速(${arg.current_speed}L)` : id
 }
 </script>
 
@@ -1922,5 +2055,23 @@ const sendScheduleData = async () => {
   font-size: 13px;
   color: #303133;
   overflow-x: auto;
+}
+
+.current-params-section {
+  margin-bottom: 20px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding: 15px;
+  border: 1px solid #e4e7ed;
+}
+
+.params-header {
+  margin-bottom: 15px;
+}
+
+.params-content {
+  background-color: #fff;
+  border-radius: 4px;
+  padding: 10px;
 }
 </style> 
