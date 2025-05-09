@@ -77,17 +77,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="灌溉单元编号" width="150">
+        <el-table-column label="灌溉单元编号" width="180">
           <template #default="scope">
-            <el-tooltip 
-              v-if="Array.isArray(scope.row.fieldUnitIds) && scope.row.fieldUnitIds.length > 1"
-              effect="light" 
-              placement="top"
-              :content="scope.row.fieldUnitIds.join(', ')"
-            >
-              <span>{{ scope.row.fieldUnitIds.length }}个单元</span>
-            </el-tooltip>
-            <span v-else>{{ Array.isArray(scope.row.fieldUnitIds) ? scope.row.fieldUnitIds.join(', ') : scope.row.fieldUnitId }}</span>
+            <span>{{ Array.isArray(scope.row.fieldUnitIds) ? scope.row.fieldUnitIds.join(', ') : scope.row.fieldUnitId }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="startTime" label="开始时间" width="180">
@@ -97,38 +89,40 @@
         </el-table-column>
         <el-table-column prop="water" label="水量(m³)" width="100">
           <template #default="scope">
-            {{ scope.row.type === 1 ? '-' : scope.row.water }}
+            {{ scope.row.type === 1 ? calculateTotalForTask(scope.row, 'water') : scope.row.water }}
           </template>
         </el-table-column>
         <el-table-column prop="fertilizerN" label="氮肥(kg)" width="100">
           <template #default="scope">
-            {{ scope.row.type === 1 ? '-' : scope.row.fertilizerN }}
+            {{ scope.row.type === 1 ? calculateTotalForTask(scope.row, 'fertilizerN') : scope.row.fertilizerN }}
           </template>
         </el-table-column>
         <el-table-column prop="fertilizerP" label="磷肥(kg)" width="100">
           <template #default="scope">
-            {{ scope.row.type === 1 ? '-' : scope.row.fertilizerP }}
+            {{ scope.row.type === 1 ? calculateTotalForTask(scope.row, 'fertilizerP') : scope.row.fertilizerP }}
           </template>
         </el-table-column>
         <el-table-column prop="fertilizerK" label="钾肥(kg)" width="100">
           <template #default="scope">
-            {{ scope.row.type === 1 ? '-' : scope.row.fertilizerK }}
+            {{ scope.row.type === 1 ? calculateTotalForTask(scope.row, 'fertilizerK') : scope.row.fertilizerK }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="scope">
-            <el-button type="primary" size="small" @click="handleEdit(scope.row)" icon="Edit">编辑</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(scope.row)" icon="Delete">删除</el-button>
-            <el-button type="success" size="small" @click="handleToGroup(scope.row)" icon="SetUp">一键分组</el-button>
-            <el-button 
-              v-if="scope.row.type === 1" 
-              type="warning" 
-              size="small" 
-              @click="handleSetUnitParams(scope.row)" 
-              icon="Setting"
-            >
-              设置单元参数
-            </el-button>
+            <div class="operation-buttons">
+              <el-button type="primary" size="small" @click="handleEdit(scope.row)" icon="Edit">编辑</el-button>
+              <el-button type="danger" size="small" @click="handleDelete(scope.row)" icon="Delete">删除</el-button>
+              <el-button type="success" size="small" @click="handleToGroup(scope.row)" icon="SetUp">一键分组</el-button>
+              <el-button 
+                v-if="scope.row.type === 1" 
+                type="warning" 
+                size="small" 
+                @click="handleSetUnitParams(scope.row)" 
+                icon="Setting"
+              >
+                设参数
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -1258,42 +1252,27 @@ const submitUnitParams = async () => {
     const index = unitParamsList.value.findIndex(item => item.fieldUnitId === selectedUnitId.value);
     if (index !== -1) {
       unitParamsList.value[index] = {
-        fieldUnitId: selectedUnitId.value,
-        taskId: currentTask.value.id,
-        water: currentUnitParams.water,
-        fertilizerN: currentUnitParams.fertilizerN,
-        fertilizerP: currentUnitParams.fertilizerP,
-        fertilizerK: currentUnitParams.fertilizerK
+        ...currentUnitParams
       };
     }
+  }
+  
+  // 验证是否选择了灌溉单元
+  if (!selectedUnitId.value) {
+    ElMessage.warning('请先选择一个灌溉单元');
+    return;
+  }
+  
+  // 获取当前选择的单元参数
+  const selectedParam = unitParamsList.value.find(p => p.fieldUnitId === selectedUnitId.value);
+  if (!selectedParam) {
+    ElMessage.warning('未找到选择的灌溉单元参数');
+    return;
   }
   
   unitParamsSubmitLoading.value = true;
   
   try {
-    // 检查是否有参数
-    if (unitParamsList.value.length === 0) {
-      ElMessage.warning('没有可保存的灌溉单元参数');
-      unitParamsSubmitLoading.value = false;
-      return;
-    }
-    
-    // 构造单个提交对象，直接使用当前选择的单元参数
-    if (!selectedUnitId.value) {
-      ElMessage.warning('请先选择一个灌溉单元');
-      unitParamsSubmitLoading.value = false;
-      return;
-    }
-    
-    // 获取当前选择的单元参数
-    const selectedParam = unitParamsList.value.find(p => p.fieldUnitId === selectedUnitId.value);
-    
-    if (!selectedParam) {
-      ElMessage.warning('未找到选择的灌溉单元参数');
-      unitParamsSubmitLoading.value = false;
-      return;
-    }
-    
     // 按照后端需要的格式构造数据
     const submitData = {
       taskId: currentTask.value.id,
@@ -1304,12 +1283,9 @@ const submitUnitParams = async () => {
       fertilizerK: selectedParam.fertilizerK
     };
     
-    console.log('提交的单元参数:', submitData);
-    
-    // 发送请求保存参数
     const response = await axios.post(`${API_BASE_URL}/task/set/fieldUnit`, submitData);
     
-    if (response.data && response.data.code === 200) {
+    if (response.data?.code === 200) {
       ElMessage.success('保存灌溉单元参数成功');
       unitParamsDialogVisible.value = false;
     } else {
@@ -1369,6 +1345,19 @@ const handleExpandChange = (row, expanded) => {
   if (expanded && row.type === 1 && row.diffListNeedsLoading) {
     loadTaskDiffList(row.id);
   }
+};
+
+// 计算差异性任务的参数总和
+const calculateTotalForTask = (task, paramName) => {
+  // 如果没有diffList或者diffList为空，返回0
+  if (!task.diffList || task.diffList.length === 0) {
+    return task.diffListNeedsLoading ? '加载中...' : 0;
+  }
+  
+  // 计算总和
+  return task.diffList.reduce((sum, unit) => {
+    return sum + (parseFloat(unit[paramName]) || 0);
+  }, 0).toFixed(2);
 };
 </script>
 
@@ -1524,5 +1513,17 @@ const handleExpandChange = (row, expanded) => {
 /* 加载中样式 */
 .loading-diff-params {
   padding: 20px;
+}
+
+/* 操作按钮容器 */
+.operation-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.operation-buttons .el-button {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 </style> 

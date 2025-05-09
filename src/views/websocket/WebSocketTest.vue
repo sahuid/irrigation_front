@@ -46,8 +46,8 @@
             >
               <template #append>
                 <el-button @click="copyBackendUrl">
-                  复制
-                </el-button>
+              复制
+            </el-button>
               </template>
             </el-input>
           </div>
@@ -102,7 +102,7 @@
             <div class="data-selector-content">
               <div class="table-operations">
                 <el-button type="primary" @click="loadGroupData">加载分组数据</el-button>
-                <el-input 
+          <el-input
                   v-model="groupSearchKeyword" 
                   placeholder="搜索分组" 
                   style="width: 200px; margin-left: 10px;" 
@@ -307,18 +307,18 @@
               <div class="tab-content">
                 <el-input
                   v-model="frontendMessageToSend"
-                  type="textarea"
+            type="textarea"
                   :rows="5"
                   placeholder="请输入要发送到前端WebSocket服务器的消息"
-                />
+          />
                 <div class="message-controls">
-                  <el-button
-                    type="primary"
+              <el-button 
+                type="primary" 
                     @click="sendFrontendMessage"
                     :disabled="!isConnectedFrontend || !frontendMessageToSend.trim()"
-                  >
+              >
                     发送消息
-                  </el-button>
+              </el-button>
                   <el-button
                     type="warning"
                     @click="formatFrontendMessage"
@@ -345,20 +345,20 @@
                   >
                     发送消息
                   </el-button>
-                  <el-button
-                    type="success"
-                    @click="generateTaskTemplate"
-                  >
-                    生成任务模板
-                  </el-button>
-                  <el-button
-                    type="warning"
+            <el-button
+              type="success"
+              @click="generateTaskTemplate"
+            >
+              生成任务模板
+            </el-button>
+            <el-button
+              type="warning"
                     @click="formatBackendMessage"
                     :disabled="!backendMessageToSend.trim()"
-                  >
-                    格式化JSON
-                  </el-button>
-                </div>
+            >
+              格式化JSON
+            </el-button>
+          </div>
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -425,7 +425,7 @@
           <li>使用前端WebSocket地址 <code>ws://localhost:9001</code> 作为连接地址</li>
           <li>连接成功后，在Apifox中发送消息到前端WebSocket服务器</li>
           <li>所有连接到前端WebSocket服务器的客户端都将收到消息</li>
-        </ol>
+          </ol>
         
         <h4>方式2：使用Apifox连接后端WebSocket</h4>
         <ol>
