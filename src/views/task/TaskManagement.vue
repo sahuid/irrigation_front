@@ -2,15 +2,35 @@
   <div class="task-management">
     <div class="content-card">
       <div class="filter-section">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索地块编号或任务编号"
-          prefix-icon="Search"
-          clearable
-          @clear="getTaskList"
-          @input="handleSearch"
-          style="width: 300px;"
-        />
+        <div class="search-inputs">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索地块编号或任务编号"
+            prefix-icon="Search"
+            clearable
+            @clear="getTaskList"
+            style="width: 200px; margin-right: 10px;"
+          />
+          <el-input
+            v-model="searchTaskId"
+            placeholder="任务编号"
+            clearable
+            @clear="getTaskList"
+            style="width: 150px; margin-right: 10px;"
+          />
+          <el-date-picker
+            v-model="searchStartTime"
+            type="datetime"
+            placeholder="开始时间"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            clearable
+            @clear="getTaskList"
+            style="width: 220px; margin-right: 10px;"
+          />
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="resetSearch">重置</el-button>
+        </div>
         <div class="action-buttons">
           <el-button type="primary" @click="handleAddTask" icon="Plus">新增任务</el-button>
           <el-button type="success" @click="handleAddDiffTask" icon="Plus">新增差异性任务</el-button>
@@ -417,6 +437,8 @@ const total = ref(0)
 
 // 搜索和筛选
 const searchKeyword = ref('')
+const searchTaskId = ref('')
+const searchStartTime = ref('')
 const taskTypeFilter = ref('all') // 任务类型筛选，默认显示全部
 
 // 筛选后的任务列表
@@ -698,7 +720,9 @@ const getTaskList = async () => {
     const params = {
       page: currentPage.value,
       pageSize: pageSize.value,
-      keyword: searchKeyword.value || undefined
+      keyword: searchKeyword.value || undefined,
+      taskId: searchTaskId.value || undefined,
+      startTime: searchStartTime.value || undefined
     };
     
     // 添加任务类型筛选
@@ -756,7 +780,17 @@ const useMockData = () => {
 
 // 搜索处理
 const handleSearch = () => {
-  getTaskList()
+  currentPage.value = 1; // 重置为第一页
+  getTaskList();
+}
+
+// 重置搜索条件
+const resetSearch = () => {
+  searchKeyword.value = '';
+  searchTaskId.value = '';
+  searchStartTime.value = '';
+  currentPage.value = 1;
+  getTaskList();
 }
 
 // 分页处理
@@ -1145,6 +1179,9 @@ const submitGroupForm = async () => {
     if (response.data.code === 200) {
       ElMessage.success(response.data.msg || '一键分组成功');
       groupDialogVisible.value = false;
+      
+      // 刷新任务列表
+      getTaskList();
     } else {
       ElMessage.error(response.data.msg || '一键分组失败');
     }
@@ -1313,6 +1350,9 @@ const submitUnitParams = async () => {
       if (currentTask.value.id) {
         loadTaskDiffList(currentTask.value.id);
       }
+      
+      // 刷新整个任务列表
+      getTaskList();
     } else {
       ElMessage.error(response.data?.msg || '保存参数失败');
     }
@@ -1351,6 +1391,11 @@ const loadTaskDiffList = async (taskId) => {
         taskList.value[taskIndex].diffList = diffList;
         taskList.value[taskIndex].diffListNeedsLoading = false;
       }
+      
+      // 如果当前任务正在展示详情，更新currentTask
+      if (currentTask.value && currentTask.value.id === taskId) {
+        currentTask.value.diffList = diffList;
+      }
     } else {
       console.error('获取灌溉单元参数失败:', response.data);
     }
@@ -1367,7 +1412,8 @@ const loadTaskDiffList = async (taskId) => {
 
 // 监听表格展开操作
 const handleExpandChange = (row, expanded) => {
-  if (expanded && row.type === 1 && row.diffListNeedsLoading) {
+  if (expanded && row.type === 1) {
+    // 无论是否需要加载，每次展开都重新获取最新数据
     loadTaskDiffList(row.id);
   }
 };
@@ -1426,6 +1472,13 @@ const handleEditUnitParam = (task, unitParam) => {
   justify-content: space-between;
   gap: 15px;
   margin-bottom: 20px;
+}
+
+.search-inputs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .action-buttons {
