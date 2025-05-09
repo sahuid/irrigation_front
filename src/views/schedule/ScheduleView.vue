@@ -875,15 +875,21 @@ const resetForm = () => {
 }
 
 // 修改打开对话框的行为
-const openScheduleDialog = () => {
-  dialogVisible.value = true
-  resetForm()
+const openScheduleDialog = async () => {
+  dialogVisible.value = true;
+  resetForm();
+  
+  // 加载整体性任务 (type=0)
+  taskOptions.value = await loadTasksByType(0);
 }
 
 // 打开差异性调度方案对话框
-const openDifferentialDialog = () => {
-  differentialDialogVisible.value = true
-  resetDifferentialForm()
+const openDifferentialDialog = async () => {
+  differentialDialogVisible.value = true;
+  resetDifferentialForm();
+  
+  // 加载差异性任务 (type=1)
+  taskOptions.value = await loadTasksByType(1);
 }
 
 // 监听表单数据变化，更新显示顺序
@@ -937,6 +943,26 @@ const loadTaskOptions = async () => {
     ElMessage.error('获取任务列表失败，请稍后重试')
   }
 }
+
+// 根据任务类型加载任务列表
+const loadTasksByType = async (type) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/task/task/type`, {
+      params: { type }
+    });
+    
+    if (response.data.code === 200) {
+      return response.data.value || [];
+    } else {
+      ElMessage.error(response.data.msg || '获取任务列表失败');
+      return [];
+    }
+  } catch (error) {
+    console.error(`获取类型${type}的任务列表出错:`, error);
+    ElMessage.error('获取任务列表失败，请稍后重试');
+    return [];
+  }
+};
 
 // 加载灌溉参数列表
 const loadArgumentOptions = async () => {
@@ -1099,15 +1125,21 @@ const generateDifferentialSchedule = async () => {
 }
 
 // 打开整体性流量控制对话框
-const openFlowControlDialog = () => {
-  flowControlDialogVisible.value = true
-  resetFlowControlForm()
+const openFlowControlDialog = async () => {
+  flowControlDialogVisible.value = true;
+  resetFlowControlForm();
+  
+  // 加载整体性任务 (type=0)
+  taskOptions.value = await loadTasksByType(0);
 }
 
 // 打开差异性流量控制对话框
-const openDifferentialFlowControlDialog = () => {
-  differentialFlowControlDialogVisible.value = true
-  resetDifferentialFlowControlForm()
+const openDifferentialFlowControlDialog = async () => {
+  differentialFlowControlDialogVisible.value = true;
+  resetDifferentialFlowControlForm();
+  
+  // 加载差异性任务 (type=1)
+  taskOptions.value = await loadTasksByType(1);
 }
 
 // 整体性流量控制的上移肥料顺序

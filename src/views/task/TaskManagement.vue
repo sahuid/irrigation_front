@@ -1351,7 +1351,7 @@ const handleExpandChange = (row, expanded) => {
 const calculateTotalForTask = (task, paramName) => {
   // 如果没有diffList或者diffList为空，返回0
   if (!task.diffList || task.diffList.length === 0) {
-    return task.diffListNeedsLoading ? '加载中...' : 0;
+    return task.diffListNeedsLoading ? '-' : 0;
   }
   
   // 计算总和
